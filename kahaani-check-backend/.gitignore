@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+venv/
+venv311/
+env/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Credentials / tokens
+
+*credentials*
+*credential*
+*secret*
+*token*
+
+# Test / tooling cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Python package/build files
+*.egg-info/
+build/
+dist/
+
+# Local application data
+data/
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

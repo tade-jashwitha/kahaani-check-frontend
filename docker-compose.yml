@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: ./kahaani-check-backend
+      dockerfile: Dockerfile
+    container_name: kahaani-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - SUPABASE_URL=http://localhost:54321
+      - SUPABASE_SECRET_KEY=local-dev-secret-key
+      - LOCAL_DEV_MODE=true
+      - WHISPER_MODEL_SIZE=tiny
+      - WHISPER_DEVICE=cpu
+      - WHISPER_COMPUTE_TYPE=int8
+      - WHISPER_LANGUAGE=hi
+    volumes:
+      - backend-data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./kahaani-check-frontend-main
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+        - NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+        - NEXT_PUBLIC_SUPABASE_ANON_KEY=local-anon-key
+        - NEXT_PUBLIC_LOCAL_DEV=true
+    container_name: kahaani-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=local-anon-key
+      - NEXT_PUBLIC_LOCAL_DEV=true
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend-data:

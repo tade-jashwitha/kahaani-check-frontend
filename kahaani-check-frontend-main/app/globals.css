@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* ========================================
+     Kahaani-Check Color System
+     ======================================== */
+
+  /* Main backgrounds */
+  --background: #FBF7EE;
+  --foreground: #17302D;
+  --surface: #FFFFFF;
+  --border: #E5E4DC;
+
+  /* Primary - Deep Teal */
+  --primary: #176B5F;
+  --primary-dark: #0F5148;
+  --primary-light: #DCEDE5;
+
+  /* ========================================
+     Status Colors
+     ======================================== */
+
+  /* Stable - Sage Green */
+  --status-stable: #198754;
+  --status-stable-bg: #DDF4E8;
+
+  /* Review - Warm Gold */
+  --status-review: #C47A12;
+  --status-review-bg: #FFF0D5;
+
+  /* Insufficient - Soft Coral */
+  --status-insufficient: #C94A4A;
+  --status-insufficient-bg: #FBE3E0;
+
+  /* ========================================
+     Text
+     ======================================== */
+
+  --text-primary: #17302D;
+  --text-secondary: #647570;
+  --text-muted: #899692;
+
+  /* ========================================
+     Shape
+     ======================================== */
+
+  --radius-card: 18px;
+  --radius-button: 12px;
+
+  /* ========================================
+     Shadows
+     ======================================== */
+
+  --shadow-card:
+    0 2px 8px rgba(23, 48, 45, 0.06),
+    0 1px 2px rgba(23, 48, 45, 0.04);
+}
+
+/* ==========================================
+   Base Styles
+   ========================================== */
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: var(--foreground);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  a {
+    color: var(--primary);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+}

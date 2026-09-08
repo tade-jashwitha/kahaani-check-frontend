@@ -1,0 +1,19 @@
+{
+  "name": "kahani",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kahaani-Check - Voice Biomarker Health Platform",
+  "scripts": {
+    "dev": "npx -y concurrently -n \"backend,frontend\" -c \"blue.bold,green.bold\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "npm run dev --prefix kahaani-check-frontend-main",
+    "dev:backend": "powershell -ExecutionPolicy Bypass -Command \"& .\\kahaani-check-backend\\.venv\\Scripts\\uvicorn.exe app.main:app --reload --host 127.0.0.1 --port 8000 --app-dir kahaani-check-backend\"",
+    "build:frontend": "npm run build --prefix kahaani-check-frontend-main",
+    "install:frontend": "npm install --prefix kahaani-check-frontend-main",
+    "install:backend": "powershell -ExecutionPolicy Bypass -Command \"cd kahaani-check-backend; if (-not (Test-Path .venv)) { python -m venv .venv }; .\\.venv\\Scripts\\pip.exe install -r requirements.txt\"",
+    "install:all": "npm run install:frontend && npm run install:backend",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  }
+}

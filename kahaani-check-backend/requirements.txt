@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+supabase
+faster-whisper
+librosa
+praat-parselmouth
+numpy
+python-multipart
+httpx
+PyJWT
+resend
