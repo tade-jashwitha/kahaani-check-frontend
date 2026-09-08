@@ -1,0 +1,62 @@
+# =============================================================================
+# Render Blueprint Specification (Infrastructure as Code)
+# Docs: https://render.com/docs/blueprint-spec
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. Backend Service (FastAPI + Audio ML Pipelines)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: kahaani-backend
+    runtime: docker
+    dockerfilePath: ./kahaani-check-backend/Dockerfile
+    dockerContext: ./kahaani-check-backend
+    plan: free
+    region: oregon
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: LOCAL_DEV_MODE
+        value: "true"
+      - key: WHISPER_MODEL_SIZE
+        value: tiny
+      - key: WHISPER_DEVICE
+        value: cpu
+      - key: WHISPER_COMPUTE_TYPE
+        value: int8
+      - key: CORS_ORIGINS
+        value: "https://kahaani-frontend.onrender.com"
+      # Supabase cloud credentials (Optional: set in Render Dashboard if using cloud Supabase)
+      # - key: SUPABASE_URL
+      #   sync: false
+      # - key: SUPABASE_SERVICE_ROLE_KEY
+      #   sync: false
+
+  # ---------------------------------------------------------------------------
+  # 2. Frontend Service (Next.js Standalone)
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: kahaani-frontend
+    runtime: docker
+    dockerfilePath: ./kahaani-check-frontend-main/Dockerfile
+    dockerContext: ./kahaani-check-frontend-main
+    plan: free
+    region: oregon
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 3000
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: kahaani-backend
+          property: host
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://kahaani-backend.onrender.com"
+      - key: NEXT_PUBLIC_LOCAL_DEV
+        value: "true"

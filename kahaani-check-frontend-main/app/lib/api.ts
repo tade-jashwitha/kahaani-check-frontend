@@ -1,6 +1,19 @@
 import { supabase } from "./supabase";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+export function getApiBaseUrl(): string {
+  const envUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const isLocalhost = host === "localhost" || host === "127.0.0.1";
+    // If deployed (e.g. on Render) and NEXT_PUBLIC_API_URL is missing or still localhost:
+    if (!isLocalhost && (!envUrl || envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))) {
+      const stored = localStorage.getItem("kahaani_api_url");
+      if (stored) return stored;
+      return "/api/backend";
+    }
+  }
+  return envUrl || "http://localhost:8000";
+}
 
 export async function apiFetch(
   endpoint: string,
@@ -26,8 +39,9 @@ export async function apiFetch(
   }
 
   const isFormData = options.body instanceof FormData;
+  const baseUrl = getApiBaseUrl();
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  const response = await fetch(`${baseUrl}${endpoint}`, {
     ...options,
 
     headers: {

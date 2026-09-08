@@ -90,6 +90,19 @@ To connect to your live Supabase cloud project:
 
 ---
 
+## Deploying to Render
+
+You can deploy the full stack on [Render](https://render.com) using the included [`render.yaml`](./render.yaml) Blueprint:
+
+1. Log in to [dashboard.render.com](https://dashboard.render.com/).
+2. Click **New +** -> **Blueprint**.
+3. Connect repository `tade-jashwitha/kahaani-check-frontend`.
+4. Click **Apply** to provision both the backend and frontend automatically.
+
+See [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md) for full deployment instructions and configuration details.
+
+---
+
 ## Architecture
 
 - **Frontend**: Next.js 14 (App Router), React 18, Tailwind CSS, Lucide icons, Recharts.
