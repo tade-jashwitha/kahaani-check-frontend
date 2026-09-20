@@ -17,3 +17,13 @@ create table if not exists public.speech_features (
 create unique index if not exists
 speech_features_call_recording_id_idx
 on public.speech_features(call_recording_id);
+
+alter table public.speech_features enable row level security;
+
+create policy "caregivers can view speech features for own elder recordings"
+on public.speech_features for select to authenticated
+using (exists (
+    select 1 from public.call_recordings cr
+    join public.elders e on e.id = cr.elder_id
+    where cr.id = speech_features.call_recording_id and e.caregiver_id = auth.uid()
+));

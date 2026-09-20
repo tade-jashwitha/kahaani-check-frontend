@@ -179,14 +179,112 @@ def _calculate_clipping_ratio(
     return clipping_ratio
 
 
+def _load_audio_file(audio_path: str) -> tuple[np.ndarray, int]:
+    """
+    Load an audio file into a mono float32 numpy array and its sample rate.
+    Uses a multi-tiered decoding strategy to reliably handle WebM Opus browser
+    recordings, WAV, MP3, M4A, and OGG across environments.
+    """
+    errors = []
+
+    # 1. Faster-Whisper built-in audio decoder (handles WebM, Opus, MP4, etc.)
+    try:
+        from faster_whisper.audio import decode_audio
+
+        audio_arr = decode_audio(audio_path, sampling_rate=16000)
+        if audio_arr is not None and len(audio_arr) > 0:
+            return audio_arr.astype(np.float32), 16000
+    except Exception as exc:
+        errors.append(f"faster_whisper: {exc}")
+
+    # 2. Librosa load
+    try:
+        return librosa.load(
+            audio_path,
+            sr=None,
+            mono=True,
+        )
+    except Exception as exc:
+        errors.append(f"librosa: {exc}")
+
+    # 3. Soundfile read
+    try:
+        import soundfile as sf
+
+        data, sr = sf.read(audio_path, dtype="float32")
+        if data.ndim > 1:
+            data = np.mean(data, axis=1)
+        return data, sr
+    except Exception as exc:
+        errors.append(f"soundfile: {exc}")
+
+    # 4. PyAV direct container decode
+    try:
+        import av
+
+        container = av.open(audio_path)
+        audio_stream = next((s for s in container.streams if s.type == "audio"), None)
+        if audio_stream is not None:
+            sample_rate = audio_stream.rate or 16000
+            resampler = av.AudioResampler(
+                format="fltp",
+                layout="mono",
+                rate=sample_rate,
+            )
+
+            frames = []
+            for frame in container.decode(audio_stream):
+                for resampled_frame in resampler.resample(frame):
+                    frames.append(resampled_frame.to_ndarray())
+            for resampled_frame in resampler.resample(None):
+                frames.append(resampled_frame.to_ndarray())
+
+            container.close()
+
+            if frames:
+                audio_arr = np.concatenate(frames, axis=1)
+                if audio_arr.ndim > 1:
+                    audio_arr = audio_arr[0]
+                return audio_arr.astype(np.float32), sample_rate
+    except Exception as exc:
+        errors.append(f"PyAV: {exc}")
+
+    # 5. FFmpeg CLI subprocess
+    try:
+        import subprocess
+
+        cmd = [
+            "ffmpeg",
+            "-nostdin",
+            "-threads",
+            "0",
+            "-i",
+            audio_path,
+            "-f",
+            "f32le",
+            "-ac",
+            "1",
+            "-ar",
+            "16000",
+            "-",
+        ]
+        proc = subprocess.run(cmd, capture_output=True, check=True)
+        audio_arr = np.frombuffer(proc.stdout, dtype=np.float32)
+        if audio_arr.size > 0:
+            return audio_arr, 16000
+    except Exception as exc:
+        errors.append(f"ffmpeg: {exc}")
+
+    raise RuntimeError(" | ".join(errors))
+
+
 def check_audio_quality(
     audio_path: str,
 ) -> QualityResult:
     """
-    Run the Kahaani-Check MVP audio quality gate.
+    Evaluate audio against technical quality thresholds.
 
     Checks:
-
     1. Audio can be decoded.
     2. Duration is acceptable.
     3. Clipping is acceptable.
@@ -205,13 +303,7 @@ def check_audio_quality(
     # =====================================================
 
     try:
-
-        audio, sample_rate = librosa.load(
-            audio_path,
-            sr=None,
-            mono=True,
-        )
-
+        audio, sample_rate = _load_audio_file(audio_path)
     except Exception as exc:
 
         return QualityResult(

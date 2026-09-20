@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 class WeeklyScheduleCreate(BaseModel):
     day_of_week: int = Field(..., ge=0, le=6)
     preferred_time: time
-    timezone: str = "Asia/Kolkata"
+    timezone: str = "UTC"
     enabled: bool = True
 
 

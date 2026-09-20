@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     WHISPER_MODEL_SIZE: str = "tiny"
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
-    WHISPER_LANGUAGE: str = "hi"
+    WHISPER_LANGUAGE: str = "auto"
 
     BHASHINI_API_KEY: str | None = None
 

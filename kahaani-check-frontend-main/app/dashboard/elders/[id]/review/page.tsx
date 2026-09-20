@@ -17,6 +17,8 @@ import {
   Heart,
   Loader2,
   Phone,
+  Printer,
+  FileText,
 } from "lucide-react";
 
 import { apiFetch } from "@/app/lib/api";
@@ -421,7 +423,7 @@ export default function ReviewPage() {
             className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-[#697572] transition hover:bg-[#F7F7F5]"
           >
             <Home size={18} />
-            My Family
+            Home
           </Link>
 
           <Link
@@ -496,22 +498,25 @@ export default function ReviewPage() {
               PAGE HEADING
           ===================================== */}
 
-          <div>
-
-            <p className="text-sm text-[#8A9290]">
-              Caregiver review
-            </p>
-
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-              Changes worth reviewing
-            </h1>
-
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-[#707B78]">
-              Review longitudinal information that
-              may be useful to discuss with a qualified
-              healthcare professional.
-            </p>
-
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="text-sm text-[#8A9290]">
+                Caregiver review
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+                Changes worth reviewing
+              </h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#707B78]">
+                Review longitudinal information that may be useful to discuss with a qualified healthcare professional.
+              </p>
+            </div>
+            <Link
+              href={`/dashboard/elders/${elderId}/report`}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#147D72] px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#105E57] self-start sm:self-auto shrink-0"
+            >
+              <Printer size={15} />
+              Export Doctor Report
+            </Link>
           </div>
 
           {/* =====================================
@@ -790,10 +795,17 @@ export default function ReviewPage() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-3">
+                  <Link
+                    href={`/dashboard/elders/${elderId}/report`}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#147D72] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#105E57]"
+                  >
+                    <Printer size={16} className="mr-2" />
+                    Print Clinical Summary for Doctor
+                  </Link>
 
                   <Link
                     href={`/dashboard/elders/${elderId}/trends`}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#176B5F] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#12584F]"
+                    className="inline-flex items-center justify-center rounded-xl border border-[#DCDDD9] bg-white px-5 py-3 text-sm font-medium text-[#315C55] transition hover:bg-[#F7F7F5]"
                   >
                     <Activity
                       size={16}
@@ -812,7 +824,6 @@ export default function ReviewPage() {
                     />
                     View check-ins
                   </Link>
-
                 </div>
 
               </div>
@@ -845,16 +856,25 @@ export default function ReviewPage() {
                     : "There is not enough evidence to create a review item from the available check-ins."}
                 </p>
 
-                <Link
-                  href={`/dashboard/elders/${elderId}/trends`}
-                  className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-[#315C55]"
-                >
-                  View conversation patterns
-                  <ArrowLeft
-                    size={15}
-                    className="rotate-180"
-                  />
-                </Link>
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <Link
+                    href={`/dashboard/elders/${elderId}/report`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#147D72] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#105E57]"
+                  >
+                    <Printer size={14} />
+                    Export Doctor Report
+                  </Link>
+                  <Link
+                    href={`/dashboard/elders/${elderId}/trends`}
+                    className="inline-flex items-center gap-2 rounded-xl border border-[#E3E8E5] bg-white px-4 py-2 text-xs font-medium text-[#315C55] hover:bg-[#F8F6F0]"
+                  >
+                    View conversation patterns
+                    <ArrowLeft
+                      size={14}
+                      className="rotate-180"
+                    />
+                  </Link>
+                </div>
 
               </div>
 

@@ -4,9 +4,12 @@ pydantic-settings
 supabase
 faster-whisper
 librosa
+soundfile
+av
 praat-parselmouth
 numpy
 python-multipart
 httpx
 PyJWT
 resend
+tzdata

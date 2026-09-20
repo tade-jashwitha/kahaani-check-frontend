@@ -29,6 +29,10 @@ services:
         value: int8
       - key: CORS_ORIGINS
         value: "https://kahaani-frontend.onrender.com"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
 
   # ---------------------------------------------------------------------------
   # 2. Frontend Service (Next.js Standalone)
@@ -48,3 +52,11 @@ services:
         value: "0.0.0.0"
       - key: NEXT_PUBLIC_LOCAL_DEV
         value: "true"
+      - key: BACKEND_URL
+        value: "https://kahaani-backend.onrender.com"
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://kahaani-backend.onrender.com"
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false

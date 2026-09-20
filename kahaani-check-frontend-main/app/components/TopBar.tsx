@@ -17,7 +17,7 @@ export default function TopBar({
   notificationCount = 0,
 }: TopBarProps) {
   return (
-    <header className="hidden lg:flex items-center justify-between border-b border-border bg-surface px-8 py-5">
+    <header className="hidden lg:flex items-center justify-between border-b border-border bg-surface px-8 py-5 print:!hidden">
       <h1 className="text-xl font-semibold text-text-primary">{title}</h1>
 
       <div className="flex items-center gap-5">

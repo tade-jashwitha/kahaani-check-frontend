@@ -1,10 +1,11 @@
-import { ReactNode } from "react";
+import React from "react";
 
 interface EmptyStateProps {
-  icon?: ReactNode;
+  icon: React.ReactNode;
   title: string;
-  description?: string;
-  action?: ReactNode;
+  description: string;
+  action?: React.ReactNode;
+  className?: string;
 }
 
 export default function EmptyState({
@@ -12,19 +13,25 @@ export default function EmptyState({
   title,
   description,
   action,
+  className = "",
 }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-12 px-6">
-      {icon && (
-        <div className="w-14 h-14 rounded-full bg-primary-light flex items-center justify-center mb-4 text-primary">
-          {icon}
-        </div>
-      )}
-      <h3 className="text-text-primary font-semibold text-lg mb-1">{title}</h3>
-      {description && (
-        <p className="text-text-secondary text-sm max-w-sm mb-4">{description}</p>
-      )}
-      {action}
+    <div
+      className={`flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#E3E8E5] bg-[#FFFFFF] p-8 text-center ${className}`}
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#E8F3F0] text-[#147D72]">
+        {icon}
+      </div>
+
+      <h3 className="mt-4 text-base font-semibold text-[#173B38]">
+        {title}
+      </h3>
+
+      <p className="mt-1.5 max-w-md text-xs leading-relaxed text-[#6B7D79]">
+        {description}
+      </p>
+
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }

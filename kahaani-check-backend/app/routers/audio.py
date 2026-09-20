@@ -269,17 +269,61 @@ def build_result_payload(
     size_bytes: int,
     processing: dict,
     analysis: dict | None,
+    status: str = "completed",
 ) -> dict:
 
-    return {
-        "success": True,
-        "recording_id": recording_id,
-        "check_in_id": check_in_id,
-        "elder_id": elder_id,
+    transcription = processing.get("transcription") or processing.get("transcript") or {}
+    transcript_text = transcription.get("text")
+    raw_transcript = transcription.get("raw_transcript") or transcript_text
+    cleaned_transcript = transcription.get("cleaned_transcript") or transcript_text
+    transcription_status = transcription.get("transcription_status") or "ok"
+    quality_flags = transcription.get("quality_flags") or []
+    quality_metrics = transcription.get("quality_metrics") or {}
+    language = transcription.get("language")
+    duration = processing.get("quality", {}).get("duration_seconds") or transcription.get("duration")
+
+    transcript_data = {
+        "call_recording_id": recording_id,
+        "text": transcript_text,
+        "raw_transcript": raw_transcript,
+        "cleaned_transcript": cleaned_transcript,
+        "language": language,
+        "model_name": transcription.get("model_name"),
+        "transcription_status": transcription_status,
+        "quality_flags": quality_flags,
+        "quality_metrics": quality_metrics,
+    }
+    recording_data = {
+        "id": recording_id,
         "storage_path": storage_path,
         "original_filename": original_filename,
         "content_type": content_type,
         "size_bytes": size_bytes,
+        "duration_seconds": duration,
+    }
+
+    return {
+        "success": True,
+        "checkin_id": check_in_id,
+        "check_in_id": check_in_id,
+        "recording_id": recording_id,
+        "elder_id": elder_id,
+        "status": status,
+        "transcript": transcript_text,
+        "raw_transcript": raw_transcript,
+        "cleaned_transcript": cleaned_transcript,
+        "transcription_status": transcription_status,
+        "quality_flags": quality_flags,
+        "quality_metrics": quality_metrics,
+        "transcript_data": transcript_data,
+        "language": language,
+        "duration": duration,
+        "storage_path": storage_path,
+        "original_filename": original_filename,
+        "content_type": content_type,
+        "size_bytes": size_bytes,
+        "recording": recording_data,
+        "features": processing.get("features"),
         "processing": processing,
         "analysis": analysis,
     }
@@ -323,37 +367,38 @@ async def upload_audio(
         "status"
     )
 
-    if current_status == "completed":
+    if settings.LOCAL_DEV_MODE:
+        # In local dev mode, allow testing and re-recording on check-ins
+        pass
+    else:
+        if current_status == "completed":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This check-in has already been completed."
+                ),
+            )
 
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This check-in has already been completed."
-            ),
-        )
+        if current_status == "technical_failure":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This check-in has already failed. "
+                    "Create or use another check-in for a retry."
+                ),
+            )
 
-    if current_status == "technical_failure":
-
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This check-in has already failed. "
-                "Create or use another check-in for a retry."
-            ),
-        )
-
-    if current_status not in {
-        "scheduled",
-        "initiated",
-    }:
-
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Audio upload is not allowed for a "
-                f"check-in with status '{current_status}'."
-            ),
-        )
+        if current_status not in {
+            "scheduled",
+            "initiated",
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Audio upload is not allowed for a "
+                    f"check-in with status '{current_status}'."
+                ),
+            )
 
     # --------------------------------------------------------
     # 3. Verify active voice consent
@@ -396,6 +441,10 @@ async def upload_audio(
         or "recording"
     )
 
+    print(f"[UPLOAD] File received: {original_filename}")
+    print(f"[UPLOAD] Filename: {original_filename}")
+    print(f"[UPLOAD] MIME type: {file.content_type}")
+
     extension = (
         Path(original_filename)
         .suffix
@@ -420,6 +469,7 @@ async def upload_audio(
     try:
 
         audio_bytes = await file.read()
+        print(f"[UPLOAD] Size: {len(audio_bytes)} bytes")
 
     except Exception as exc:
 
@@ -584,7 +634,7 @@ async def upload_audio(
 
     try:
 
-        update_result = (
+        update_query = (
             supabase
             .table("check_ins")
             .update(
@@ -598,12 +648,10 @@ async def upload_audio(
                 "id",
                 check_in_id,
             )
-            .eq(
-                "status",
-                current_status,
-            )
-            .execute()
         )
+        if not settings.LOCAL_DEV_MODE:
+            update_query = update_query.eq("status", current_status)
+        update_result = update_query.execute()
 
         if (
             not update_result
@@ -700,13 +748,60 @@ async def upload_audio(
         )
 
     # --------------------------------------------------------
+    # 11b. Normalize audio to standard 16 kHz mono WAV
+    # --------------------------------------------------------
+    from app.services.audio_normalizer import normalize_to_wav
+    print(f"[AUDIO] Validating audio: {temp_audio_path.name}")
+    print("[AUDIO] Converting audio to 16 kHz mono WAV")
+    normalized_wav_path: str | None = None
+    try:
+        normalized_wav_path, norm_duration, norm_sr, norm_channels = normalize_to_wav(
+            str(temp_audio_path)
+        )
+        print(f"[AUDIO] Normalization complete: duration={norm_duration:.2f}s, sr={norm_sr}, ch={norm_channels}")
+    except Exception as norm_exc:
+        print(f"[AUDIO] Normalization failed: {norm_exc}")
+        mark_processing_failure(
+            supabase=supabase,
+            check_in_id=check_in_id,
+            recording_id=recording_id,
+            reason=f"Audio normalization failed: {norm_exc}",
+        )
+        delete_from_storage(supabase, bucket, storage_path)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Audio normalization failed: {norm_exc}",
+        )
+
+    # --------------------------------------------------------
+    # 11c. Fetch elder's preferred language
+    # --------------------------------------------------------
+    elder_language: str | None = None
+    try:
+        elder_res = (
+            supabase
+            .table("elders")
+            .select("preferred_call_language, language")
+            .eq("id", elder_id)
+            .maybe_single()
+            .execute()
+        )
+        if elder_res and elder_res.data:
+            elder_language = elder_res.data.get("preferred_call_language") or elder_res.data.get("language")
+    except Exception as exc:
+        print(f"[AUDIO] Note: Could not fetch elder language: {exc}")
+
+    print(f"[STT] Configured elder language: {elder_language or 'auto-detect'}")
+
+    # --------------------------------------------------------
     # 12. Run complete audio pipeline
     # --------------------------------------------------------
 
     try:
 
         processing_result = process_audio(
-            str(temp_audio_path)
+            normalized_wav_path,
+            language=elder_language,
         )
 
     except Exception as exc:
@@ -720,7 +815,7 @@ async def upload_audio(
             supabase=supabase,
             check_in_id=check_in_id,
             recording_id=recording_id,
-            reason="Audio processing failed.",
+            reason=f"Audio processing failed: {exc}",
         )
 
         raise HTTPException(
@@ -730,17 +825,21 @@ async def upload_audio(
 
     finally:
 
-        # The permanent copy is in Supabase Storage.
-        # This local copy is temporary.
+        # Clean up local temporary files
         try:
             temp_audio_path.unlink(
                 missing_ok=True
             )
-        except Exception as exc:
-            print(
-                "WARNING: Failed to delete temporary "
-                f"audio file: {exc}"
-            )
+        except Exception:
+            pass
+
+        if normalized_wav_path:
+            try:
+                Path(normalized_wav_path).unlink(
+                    missing_ok=True
+                )
+            except Exception:
+                pass
 
     # --------------------------------------------------------
     # 13. Extract quality result
@@ -901,29 +1000,44 @@ async def upload_audio(
                 detail="Failed to finalize audio quality status.",
             )
 
-        if quality_status == "rejected":
+        return {
+            "success": False,
+            "checkin_id": check_in_id,
+            "check_in_id": check_in_id,
+            "recording_id": recording_id,
+            "status": target_checkin_status,
+            "transcript": None,
+            "error": quality_reason or "Audio quality insufficient for analysis.",
+            "processing": processing_result,
+        }
 
-            return build_result_payload(
-                check_in_id=check_in_id,
-                recording_id=recording_id,
-                elder_id=elder_id,
-                storage_path=storage_path,
-                original_filename=original_filename,
-                content_type=file.content_type,
-                size_bytes=len(audio_bytes),
-                processing=processing_result,
-                analysis={
-                    "status": "poor_audio",
-                    "neutral_status": "Insufficient data",
-                    "baseline": None,
-                    "trajectory": None,
-                },
-            )
+    # --------------------------------------------------------
+    # 15b. Handle transcription failure
+    # --------------------------------------------------------
 
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Audio quality processing failed.",
+    if processing_result.get("status") == "transcription_failed":
+        err_msg = processing_result.get("error") or "Audio transcription failed."
+        mark_processing_failure(
+            supabase=supabase,
+            check_in_id=check_in_id,
+            recording_id=recording_id,
+            reason=err_msg,
         )
+        try:
+            update_checkin_status(supabase, check_in_id, "transcription_failed")
+        except Exception:
+            pass
+
+        return {
+            "success": False,
+            "checkin_id": check_in_id,
+            "check_in_id": check_in_id,
+            "recording_id": recording_id,
+            "status": "transcription_failed",
+            "transcript": None,
+            "error": err_msg,
+            "processing": processing_result,
+        }
 
     # --------------------------------------------------------
     # 16. Save transcript
@@ -950,12 +1064,23 @@ async def upload_audio(
             recording_id=recording_id,
             reason="Speech transcription produced no text.",
         )
+        try:
+            update_checkin_status(supabase, check_in_id, "transcription_failed")
+        except Exception:
+            pass
 
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Audio transcription failed.",
-        )
+        return {
+            "success": False,
+            "checkin_id": check_in_id,
+            "check_in_id": check_in_id,
+            "recording_id": recording_id,
+            "status": "transcription_failed",
+            "transcript": None,
+            "error": "Speech transcription produced no text.",
+            "processing": processing_result,
+        }
 
+    print(f"[DB] Saving transcript: length={len(transcript_text)} characters")
     try:
 
         transcript_result = (
@@ -973,11 +1098,20 @@ async def upload_audio(
                         transcription.get(
                             "language"
                         )
+                        or elder_language
+                        or "unknown"
                     ),
                     "model_name": (
                         transcription.get(
                             "model_name"
                         )
+                        or "tiny"
+                    ),
+                    "confidence": (
+                        transcription.get(
+                            "confidence"
+                        )
+                        or 1.0
                     ),
                 }
             )
@@ -992,6 +1126,8 @@ async def upload_audio(
             raise RuntimeError(
                 "Transcript was not persisted."
             )
+
+        print("[DB] Transcript saved successfully")
 
     except Exception as exc:
 
@@ -1009,7 +1145,7 @@ async def upload_audio(
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save transcript.",
+            detail=f"Failed to save transcript: {exc}",
         )
 
     # --------------------------------------------------------
@@ -1255,6 +1391,7 @@ async def upload_audio(
     # 24. Return complete result
     # --------------------------------------------------------
 
+    print("[PIPELINE] Completed")
     return build_result_payload(
         check_in_id=check_in_id,
         recording_id=recording_id,
@@ -1265,6 +1402,7 @@ async def upload_audio(
         size_bytes=len(audio_bytes),
         processing=processing_result,
         analysis=analysis,
+        status="completed",
     )
 
 

@@ -1,399 +1,131 @@
-from app.services.feature_extraction import (
-    extract_features,
+from __future__ import annotations
+
+from typing import Any
+from app.pipeline.stages import (
+    quality_stage,
+    transcription_stage,
+    sufficiency_stage,
+    feature_stage,
 )
-from app.services.quality_gate import (
-    check_audio_quality,
-)
-from app.services.stt_service import (
-    transcribe,
-)
 
 
-# =========================================================
-# Speech sufficiency thresholds
-# =========================================================
-
-# Minimum amount of detected speech required before we
-# calculate longitudinal speech features.
-MIN_USABLE_SPEECH_SECONDS = 8.0
-
-# Minimum percentage of the recording that should contain
-# detected speech.
-MIN_SPEECH_RATIO = 0.20
-
-# Minimum number of recognized words.
-MIN_TRANSCRIPT_WORDS = 5
-
-
-def _count_words(text: str) -> int:
-    """
-    Count recognized transcript words.
-    """
-
-    return len(
-        text.split()
-    )
-
-
-def _calculate_speech_duration(
-    segments: list[dict],
-) -> float:
-    """
-    Calculate total detected speech duration.
-
-    Overlapping Whisper segments are merged so that speech
-    is never counted twice.
-    """
-
-    if not segments:
-        return 0.0
-
-    intervals: list[
-        tuple[float, float]
-    ] = []
-
-    for segment in segments:
-        start = float(
-            segment["start"]
-        )
-
-        end = float(
-            segment["end"]
-        )
-
-        if end > start:
-            intervals.append(
-                (
-                    start,
-                    end,
-                )
-            )
-
-    if not intervals:
-        return 0.0
-
-    intervals.sort(
-        key=lambda x: x[0]
-    )
-
-    merged: list[
-        tuple[float, float]
-    ] = []
-
-    current_start, current_end = (
-        intervals[0]
-    )
-
-    for start, end in intervals[1:]:
-        if start <= current_end:
-            current_end = max(
-                current_end,
-                end,
-            )
-        else:
-            merged.append(
-                (
-                    current_start,
-                    current_end,
-                )
-            )
-
-            current_start = start
-            current_end = end
-
-    merged.append(
-        (
-            current_start,
-            current_end,
-        )
-    )
-
-    return sum(
-        end - start
-        for start, end in merged
-    )
-
-
-def _speech_sufficiency(
-    text: str,
-    segments: list[dict],
-    total_duration_seconds: float,
-) -> dict:
-    """
-    Determine whether the recording contains enough
-    usable speech for feature extraction.
-
-    IMPORTANT:
-    Failure here is NOT cognitive decline.
-
-    It simply means there is insufficient usable evidence.
-    """
-
-    speech_duration = (
-        _calculate_speech_duration(
-            segments
-        )
-    )
-
-    word_count = _count_words(
-        text
-    )
-
-    if total_duration_seconds <= 0:
-        speech_ratio = 0.0
-    else:
-        speech_ratio = (
-            speech_duration
-            / total_duration_seconds
-        )
-
-    # -----------------------------------------------------
-    # Check 1: minimum speech duration
-    # -----------------------------------------------------
-
-    if (
-        speech_duration
-        < MIN_USABLE_SPEECH_SECONDS
-    ):
-        return {
-            "passed": False,
-
-            "reason": (
-                "Insufficient detected "
-                "speech duration"
-            ),
-
-            "speech_duration_seconds": (
-                speech_duration
-            ),
-
-            "speech_ratio": (
-                speech_ratio
-            ),
-
-            "word_count": word_count,
-        }
-
-    # -----------------------------------------------------
-    # Check 2: minimum speech ratio
-    # -----------------------------------------------------
-
-    if speech_ratio < MIN_SPEECH_RATIO:
-        return {
-            "passed": False,
-
-            "reason": (
-                "Too little usable speech "
-                "relative to recording "
-                "duration"
-            ),
-
-            "speech_duration_seconds": (
-                speech_duration
-            ),
-
-            "speech_ratio": (
-                speech_ratio
-            ),
-
-            "word_count": word_count,
-        }
-
-    # -----------------------------------------------------
-    # Check 3: minimum transcript size
-    # -----------------------------------------------------
-
-    if word_count < MIN_TRANSCRIPT_WORDS:
-        return {
-            "passed": False,
-
-            "reason": (
-                "Transcript contains too "
-                "few recognized words"
-            ),
-
-            "speech_duration_seconds": (
-                speech_duration
-            ),
-
-            "speech_ratio": (
-                speech_ratio
-            ),
-
-            "word_count": word_count,
-        }
-
-    return {
-        "passed": True,
-
-        "reason": None,
-
-        "speech_duration_seconds": (
-            speech_duration
-        ),
-
-        "speech_ratio": (
-            speech_ratio
-        ),
-
-        "word_count": word_count,
-    }
+# ============================================================
+# Audio Processing Pipeline — Orchestrator
+# ============================================================
+#
+# Pipeline:
+#   Normalized Audio (16kHz mono WAV)
+#     ↓
+#   [Stage 1] Quality Gate        — rejects unreadable/clipped/noisy audio
+#     ↓
+#   [Stage 2] Whisper STT         — speech-to-text with language detection
+#     ↓
+#   [Stage 3] Speech Sufficiency  — ensures enough continuous speech
+#     ↓
+#   [Stage 4] Feature Extraction  — speaking rate, pauses, lexical diversity
+#     ↓
+#   Result dict
+# ============================================================
 
 
 def process_audio(
     audio_path: str,
-) -> dict:
+    language: str | None = None,
+) -> dict[str, Any]:
     """
-    Kahaani-Check speech processing pipeline.
+    Run the full Kahaani-Check speech processing pipeline.
 
-    Audio
-        ↓
-    Audio quality
-        ↓
-    Whisper STT
-        ↓
-    Speech sufficiency
-        ↓
-    Feature extraction
-
-    Insufficient speech is classified as insufficient
-    evidence and MUST NOT be interpreted as cognitive decline.
+    Returns a result dict with keys:
+      status      — 'processed' | 'rejected' | 'transcription_failed' | 'insufficient_speech'
+      quality     — quality gate result
+      transcription  — STT output (text, segments, language, duration, confidence)
+      speech_sufficiency — sufficiency gate result (if available)
+      features    — extracted features dict, or None
+      error       — error message if any stage failed
     """
 
-    # =====================================================
-    # 1. Audio quality gate
-    # =====================================================
+    # ----------------------------------------------------------------
+    # Stage 1: Audio quality gate
+    # ----------------------------------------------------------------
+    print("[AUDIO] Validating audio quality thresholds")
+    quality = quality_stage.run(audio_path)
 
-    quality = check_audio_quality(
-        audio_path
-    )
-
-    if not quality.passed:
+    if not quality.get("passed"):
+        print(f"[AUDIO] Quality check rejected: {quality.get('reason')}")
         return {
             "status": "rejected",
-
-            "quality": {
-                "passed": False,
-
-                "duration_seconds": (
-                    quality.duration_seconds
-                ),
-
-                "snr_db": (
-                    quality.snr_db
-                ),
-
-                "clipping_ratio": (
-                    quality.clipping_ratio
-                ),
-
-                "reason": (
-                    quality.reason
-                ),
-            },
+            "quality": quality,
+            "transcription": None,
+            "features": None,
+            "error": quality.get("reason"),
         }
 
-    # =====================================================
-    # 2. Whisper transcription
-    # =====================================================
+    # ----------------------------------------------------------------
+    # Stage 2: Whisper STT (Real Transcription)
+    # ----------------------------------------------------------------
+    try:
+        transcription = transcription_stage.run(audio_path, language=language)
+    except Exception as exc:
+        try:
+            print(f"[STT] Transcription error: {exc!r}")
+        except Exception:
+            pass
+        return {
+            "status": "transcription_failed",
+            "quality": quality,
+            "transcription": None,
+            "features": None,
+            "error": str(exc),
+        }
 
-    transcription = transcribe(
-        audio_path
-    )
+    text = (transcription.get("text") or "").strip()
+    segments = transcription.get("segments", [])
 
-    text = transcription.get(
-        "text",
-        "",
-    )
+    if not text:
+        print("[STT] Transcription yielded empty text.")
+        return {
+            "status": "transcription_failed",
+            "quality": quality,
+            "transcription": transcription,
+            "features": None,
+            "error": "No speech detected in audio file.",
+        }
 
-    segments = transcription.get(
-        "segments",
-        [],
-    )
-
-    # =====================================================
-    # 3. Speech sufficiency gate
-    # =====================================================
-
-    sufficiency = _speech_sufficiency(
+    # ----------------------------------------------------------------
+    # Stage 3: Speech sufficiency gate
+    # ----------------------------------------------------------------
+    duration_sec = float(quality.get("duration_seconds") or transcription.get("duration") or 0.0)
+    sufficiency = sufficiency_stage.run(
         text=text,
         segments=segments,
-        total_duration_seconds=(
-            quality.duration_seconds
-        ),
+        total_duration_seconds=duration_sec,
     )
 
-    if not sufficiency["passed"]:
+    if not sufficiency.get("passed"):
+        print("[PIPELINE] Insufficient speech detected for clinical feature extraction.")
         return {
             "status": "insufficient_speech",
-
-            "quality": {
-                "passed": True,
-
-                "duration_seconds": (
-                    quality.duration_seconds
-                ),
-
-                "snr_db": (
-                    quality.snr_db
-                ),
-
-                "clipping_ratio": (
-                    quality.clipping_ratio
-                ),
-            },
-
+            "quality": quality,
             "transcription": transcription,
-
-            "speech_sufficiency": (
-                sufficiency
-            ),
-
-            # Critical:
-            # no unreliable feature values.
+            "speech_sufficiency": sufficiency,
             "features": None,
         }
 
-    # =====================================================
-    # 4. Feature extraction
-    # =====================================================
-
-    features = extract_features(
+    # ----------------------------------------------------------------
+    # Stage 4: Feature extraction
+    # ----------------------------------------------------------------
+    print("[PIPELINE] Extracting acoustic and lexical features")
+    features = feature_stage.run(
         text=text,
         segments=segments,
-        total_duration_seconds=(
-            quality.duration_seconds
-        ),
+        total_duration_seconds=duration_sec,
     )
 
-    # =====================================================
-    # 5. Final processed result
-    # =====================================================
-
+    print("[PIPELINE] Audio processing pipeline completed successfully.")
     return {
         "status": "processed",
-
-        "quality": {
-            "passed": True,
-
-            "duration_seconds": (
-                quality.duration_seconds
-            ),
-
-            "snr_db": (
-                quality.snr_db
-            ),
-
-            "clipping_ratio": (
-                quality.clipping_ratio
-            ),
-        },
-
+        "quality": quality,
         "transcription": transcription,
-
-        "speech_sufficiency": (
-            sufficiency
-        ),
-
+        "speech_sufficiency": sufficiency,
         "features": features,
     }

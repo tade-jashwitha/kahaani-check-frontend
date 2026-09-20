@@ -4,58 +4,44 @@
 
 :root {
   /* ========================================
-     Kahaani-Check Color System
+     Kahaani-Check Design Tokens
      ======================================== */
 
-  /* Main backgrounds */
-  --background: #FBF7EE;
-  --foreground: #17302D;
+  /* Main background & surface */
+  --background: #F8F6F0;
+  --foreground: #173B38;
   --surface: #FFFFFF;
-  --border: #E5E4DC;
+  --border: #E3E8E5;
 
-  /* Primary - Deep Teal */
-  --primary: #176B5F;
-  --primary-dark: #0F5148;
-  --primary-light: #DCEDE5;
+  /* Primary - Dark Teal */
+  --primary: #147D72;
+  --primary-dark: #105E57;
+  --primary-light: #E8F3F0;
 
-  /* ========================================
-     Status Colors
-     ======================================== */
+  /* Soft accents */
+  --soft-teal: #E8F3F0;
+  --soft-orange: #F8EBDD;
 
-  /* Stable - Sage Green */
+  /* Status Colors */
   --status-stable: #198754;
-  --status-stable-bg: #DDF4E8;
-
-  /* Review - Warm Gold */
+  --status-stable-bg: #E8F3F0;
   --status-review: #C47A12;
-  --status-review-bg: #FFF0D5;
-
-  /* Insufficient - Soft Coral */
+  --status-review-bg: #F8EBDD;
   --status-insufficient: #C94A4A;
-  --status-insufficient-bg: #FBE3E0;
+  --status-insufficient-bg: #FBEAE8;
 
-  /* ========================================
-     Text
-     ======================================== */
+  /* Typography Colors */
+  --text-primary: #173B38;
+  --text-secondary: #6B7D79;
+  --text-muted: #8F9E9B;
 
-  --text-primary: #17302D;
-  --text-secondary: #647570;
-  --text-muted: #899692;
+  /* Shape */
+  --radius-card: 16px;
+  --radius-button: 10px;
 
-  /* ========================================
-     Shape
-     ======================================== */
-
-  --radius-card: 18px;
-  --radius-button: 12px;
-
-  /* ========================================
-     Shadows
-     ======================================== */
-
-  --shadow-card:
-    0 2px 8px rgba(23, 48, 45, 0.06),
-    0 1px 2px rgba(23, 48, 45, 0.04);
+  /* Subtle Shadows */
+  --shadow-card: 0 1px 3px 0 rgba(23, 59, 56, 0.04), 0 1px 2px -1px rgba(23, 59, 56, 0.04);
+  --shadow-card-hover: 0 4px 12px 0 rgba(23, 59, 56, 0.07), 0 2px 4px -2px rgba(23, 59, 56, 0.05);
 }
 
 /* ==========================================
@@ -74,34 +60,56 @@
   body {
     background-color: var(--background);
     color: var(--text-primary);
-    font-family: var(--font-manrope), Arial, Helvetica, sans-serif;
+    font-family: var(--font-manrope), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 16px;
+    font-size: 14px;
     line-height: 1.5;
   }
 
-  h1,
-  h2,
-  h3,
-  h4 {
-    color: var(--foreground);
+  h1 {
+    font-size: 32px;
     font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.35;
     letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--text-primary);
   }
 
   a {
     color: var(--primary);
   }
+}
 
-  button,
-  input,
-  textarea,
-  select {
-    font: inherit;
-  }
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
-  button {
-    -webkit-tap-highlight-color: transparent;
-  }
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4DCD8;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B0BCB7;
 }

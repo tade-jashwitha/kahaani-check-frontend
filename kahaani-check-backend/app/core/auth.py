@@ -43,6 +43,21 @@ def verify_supabase_jwt(
         access_token in {"dev-token", "mock-token", "local-token"}
         or access_token.startswith("dev-")
     ):
+        user_email = "caregiver@kahaani.local"
+        if ":" in access_token:
+            user_email = access_token.split(":", 1)[1].strip()
+        elif access_token.startswith("dev-user-"):
+            user_email = access_token[len("dev-user-"):].strip()
+
+        if user_email and user_email.lower() != "caregiver@kahaani.local":
+            import uuid
+            user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, user_email.lower()))
+            return {
+                "id": user_id,
+                "email": user_email,
+                "role": "caregiver",
+            }
+
         return {
             "id": "00000000-0000-0000-0000-000000000001",
             "email": "caregiver@kahaani.local",
@@ -79,6 +94,19 @@ def verify_supabase_jwt(
 
     except Exception:
         if settings.LOCAL_DEV_MODE:
+            user_email = ""
+            if ":" in access_token:
+                user_email = access_token.split(":", 1)[1].strip()
+            elif access_token.startswith("dev-user-"):
+                user_email = access_token[len("dev-user-"):].strip()
+            if user_email and user_email.lower() != "caregiver@kahaani.local":
+                import uuid
+                user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, user_email.lower()))
+                return {
+                    "id": user_id,
+                    "email": user_email,
+                    "role": "caregiver",
+                }
             return {
                 "id": "00000000-0000-0000-0000-000000000001",
                 "email": "caregiver@kahaani.local",

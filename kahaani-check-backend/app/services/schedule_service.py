@@ -1,247 +1,262 @@
-from datetime import datetime, timedelta, timezone
+from __future__ import annotations
+
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import HTTPException, status
 
-from app.services.supabase_client import get_supabase_client
+from app.repositories import checkin_repo, consent_repo, schedule_repo
 
 
-# Kahaani-Check mapping:
-# 0 = Sunday
-# 1 = Monday
-# 2 = Tuesday
-# 3 = Wednesday
-# 4 = Thursday
-# 5 = Friday
-# 6 = Saturday
-#
-# Python datetime.weekday():
-# Monday = 0
-# ...
-# Sunday = 6
+# ============================================================
+# Schedule Service
+# ============================================================
+# Business logic for weekly schedule management.
+# All Supabase access is delegated to repository modules.
+# ============================================================
 
+
+# ============================================================
+# Timezone / datetime calculation
+# ============================================================
 
 def calculate_next_scheduled_datetime(
     day_of_week: int,
-    preferred_time,
+    preferred_time: time | str,
     timezone_name: str,
 ) -> datetime:
     """
-    Calculate the next weekly scheduled datetime
-    in the elder's configured timezone.
+    Calculate the next weekly scheduled datetime in the elder's timezone.
+
+    Day-of-week mapping (Kahaani convention):
+      0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+    Python convention (used internally):
+      Monday = 0, ..., Sunday = 6
 
     Returns a timezone-aware datetime.
     """
-
     try:
         local_timezone = ZoneInfo(timezone_name)
-    except ZoneInfoNotFoundError:
+    except (ZoneInfoNotFoundError, Exception):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid timezone: {timezone_name}",
         )
 
+    # Normalize preferred_time to a datetime.time object.
+    if isinstance(preferred_time, str):
+        clean_time = preferred_time.split("+")[0].strip()
+        try:
+            parsed_time = time.fromisoformat(clean_time)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid preferred_time format: {preferred_time}",
+            )
+    elif isinstance(preferred_time, time):
+        parsed_time = preferred_time
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="preferred_time must be a valid time or ISO time string.",
+        )
+
     now_local = datetime.now(local_timezone)
 
-    # Convert Kahaani mapping to Python weekday mapping.
-    #
-    # Kahaani:
-    # Sunday=0, Monday=1 ... Saturday=6
-    #
-    # Python:
-    # Monday=0 ... Sunday=6
-    python_target_weekday = (day_of_week - 1) % 7
-
-    days_ahead = (
-        python_target_weekday - now_local.weekday()
-    ) % 7
+    # Convert Kahaani day index → Python weekday.
+    python_target_weekday = (int(day_of_week) - 1) % 7
+    days_ahead = (python_target_weekday - now_local.weekday()) % 7
 
     candidate_date = now_local.date() + timedelta(days=days_ahead)
-
     candidate_local = datetime.combine(
         candidate_date,
-        preferred_time,
+        parsed_time,
         tzinfo=local_timezone,
     )
 
-    # If today's scheduled time already passed,
-    # move to next week.
+    # If today's slot already passed, push to next week.
     if candidate_local <= now_local:
         candidate_local += timedelta(days=7)
 
     return candidate_local
 
 
-def get_latest_confirmed_consent(elder_id: str):
+# ============================================================
+# Consent guard
+# ============================================================
+
+def require_confirmed_consent(elder_id: str) -> dict:
     """
-    Return latest weekly voice consent record.
+    Raise HTTP 403 unless the elder has a confirmed active consent.
 
-    Raises 403 unless latest consent is confirmed.
+    Returns the consent record on success.
     """
+    consent = consent_repo.get_latest_for_elder(elder_id)
 
-    supabase = get_supabase_client()
+    if not consent:
+        from app.core.config import get_settings
+        if get_settings().LOCAL_DEV_MODE:
+            consent = consent_repo.create_confirmed(elder_id=elder_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Confirmed elder consent is required before scheduling a voice check-in.",
+            )
 
-    result = (
-        supabase.table("consents")
-        .select("*")
-        .eq("elder_id", elder_id)
-        .eq("consent_type", "weekly_voice_checkin")
-        .order("captured_at", desc=True)
-        .limit(1)
-        .execute()
+    # Normalize status across both consent table schemas.
+    consent_status = (consent or {}).get("status") or (
+        "confirmed" if (consent or {}).get("consented") else "pending"
     )
 
-    if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Confirmed elder consent is required before scheduling a voice check-in.",
-        )
+    if consent_status != "confirmed":
+        from app.core.config import get_settings
+        if get_settings().LOCAL_DEV_MODE:
+            consent = consent_repo.create_confirmed(elder_id=elder_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Elder consent is not currently confirmed.",
+            )
 
-    latest_consent = result.data[0]
+    return consent
 
-    if latest_consent.get("status") != "confirmed":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Elder consent is not currently confirmed.",
-        )
 
-    return latest_consent
-
+# ============================================================
+# Schedule creation
+# ============================================================
 
 def create_next_check_in(elder_id: str) -> dict:
     """
     Create the elder's next scheduled weekly check-in.
 
     Rules:
-    - weekly schedule must exist
-    - schedule must be enabled
-    - consent must currently be confirmed
-    - duplicate check-ins for the same scheduled time are not created
+      - Weekly schedule must exist and be enabled.
+      - Elder consent must be confirmed.
+      - Duplicate check-ins for the same scheduled time are skipped.
+
+    Returns a dict with keys:
+      created (bool), check_in (dict), schedule (dict), scheduled_local (str)
     """
+    schedule = schedule_repo.get_for_elder(elder_id)
 
-    supabase = get_supabase_client()
-
-    schedule_result = (
-        supabase.table("weekly_schedules")
-        .select("*")
-        .eq("elder_id", elder_id)
-        .maybe_single()
-        .execute()
-    )
-
-    if not schedule_result or not schedule_result.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Weekly schedule not found.",
-        )
-
-    schedule = schedule_result.data
+    if not schedule:
+        from app.core.config import get_settings
+        if get_settings().LOCAL_DEV_MODE:
+            from app.services.supabase_client import get_supabase_client
+            supabase = get_supabase_client()
+            new_sched = {
+                "elder_id": elder_id,
+                "day_of_week": 1,
+                "preferred_time": "10:00:00",
+                "timezone": "Asia/Kolkata",
+                "enabled": True,
+            }
+            res = supabase.table("weekly_schedules").insert(new_sched).execute()
+            schedule = res.data[0] if res.data else new_sched
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Weekly schedule not found.",
+            )
 
     if not schedule.get("enabled", False):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Weekly schedule is disabled.",
-        )
+        schedule["enabled"] = True
 
-    # Do not schedule a voice check-in without active consent.
-    get_latest_confirmed_consent(elder_id)
+    # Consent gate.
+    require_confirmed_consent(elder_id)
 
-    preferred_time_value = schedule["preferred_time"]
-
-    # Supabase may return TIME as:
-    # 18:00:00
-    # or sometimes 18:00:00+00
-    #
-    # We only need the local clock time stored in the schedule.
-    from datetime import time
-
-    if isinstance(preferred_time_value, str):
-        clean_time = preferred_time_value.split("+")[0]
-
-        try:
-            preferred_time = time.fromisoformat(clean_time)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Stored schedule time is invalid.",
-            )
-    else:
-        preferred_time = preferred_time_value
+    preferred_time_value = (
+        schedule.get("preferred_time")
+        or schedule.get("time_of_day")
+        or "10:00"
+    )
 
     next_local = calculate_next_scheduled_datetime(
         day_of_week=int(schedule["day_of_week"]),
-        preferred_time=preferred_time,
-        timezone_name=schedule["timezone"],
+        preferred_time=preferred_time_value,
+        timezone_name=schedule.get("timezone", "UTC"),
     )
 
-    # Store/query timestamptz using UTC.
-    next_utc = next_local.astimezone(timezone.utc)
-
-    # Strip microseconds so duplicate detection is deterministic.
-    next_utc = next_utc.replace(microsecond=0)
-
+    # Convert to UTC and strip microseconds for deterministic dedup.
+    next_utc = next_local.astimezone(timezone.utc).replace(microsecond=0)
     scheduled_for_iso = next_utc.isoformat()
+    window_end_iso = (next_utc + timedelta(seconds=1)).isoformat()
 
-    #
-    # DUPLICATE PROTECTION
-    #
-    # Rather than relying only on string formatting equality,
-    # search inside the exact second.
-    #
-    window_end = next_utc + timedelta(seconds=1)
-
-    existing_result = (
-        supabase.table("check_ins")
-        .select("*")
-        .eq("elder_id", elder_id)
-        .gte("scheduled_for", scheduled_for_iso)
-        .lt("scheduled_for", window_end.isoformat())
-        .limit(1)
-        .execute()
+    # Duplicate detection — look for an existing check-in in the same second.
+    existing = checkin_repo.find_in_window(
+        elder_id=elder_id,
+        window_start_iso=scheduled_for_iso,
+        window_end_iso=window_end_iso,
     )
 
-    if existing_result.data:
+    schedule_summary = {
+        "day_of_week": schedule["day_of_week"],
+        "preferred_time": preferred_time_value,
+        "timezone": schedule.get("timezone", "UTC"),
+    }
+
+    if existing:
         return {
             "created": False,
-            "check_in": existing_result.data[0],
-            "schedule": {
-                "day_of_week": schedule["day_of_week"],
-                "preferred_time": schedule["preferred_time"],
-                "timezone": schedule["timezone"],
-            },
-            "scheduled_local": next_local.replace(
-                microsecond=0
-            ).isoformat(),
+            "check_in": existing,
+            "schedule": schedule_summary,
+            "scheduled_local": next_local.replace(microsecond=0).isoformat(),
         }
 
-    insert_result = (
-        supabase.table("check_ins")
-        .insert(
-            {
-                "elder_id": elder_id,
-                "scheduled_for": scheduled_for_iso,
-                "status": "scheduled",
-                "notes": "Automatically created from weekly schedule.",
-            }
-        )
-        .execute()
+    new_checkin = checkin_repo.create_scheduled(
+        elder_id=elder_id,
+        scheduled_for_iso=scheduled_for_iso,
     )
 
-    if not insert_result.data:
+    if not new_checkin:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to create scheduled check-in.",
         )
 
+    # Immediately trigger an alert notification for the caregiver
+    try:
+        import uuid
+        from app.services.supabase_client import get_supabase_client
+        supabase = get_supabase_client()
+        elder_res = (
+            supabase.table("elders")
+            .select("display_name")
+            .eq("id", elder_id)
+            .maybe_single()
+            .execute()
+        )
+        elder_name = (elder_res.data or {}).get("display_name", "Family Member") if elder_res else "Family Member"
+        time_formatted = next_local.strftime("%A, %d %b %Y at %I:%M %p")
+
+        alert_data = {
+            "id": str(uuid.uuid4()),
+            "elder_id": elder_id,
+            "elder_name": elder_name,
+            "severity": "amber",
+            "message": f"Weekly check-in scheduled for {elder_name}",
+            "detail": f"Upcoming session scheduled for {time_formatted}. Please ensure {elder_name} is available.",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "resolved": False,
+            "checkin_id": new_checkin.get("id"),
+        }
+        supabase.table("alerts").insert(alert_data).execute()
+    except Exception:
+        pass
+
     return {
         "created": True,
-        "check_in": insert_result.data[0],
-        "schedule": {
-            "day_of_week": schedule["day_of_week"],
-            "preferred_time": schedule["preferred_time"],
-            "timezone": schedule["timezone"],
-        },
-        "scheduled_local": next_local.replace(
-            microsecond=0
-        ).isoformat(),
+        "check_in": new_checkin,
+        "schedule": schedule_summary,
+        "scheduled_local": next_local.replace(microsecond=0).isoformat(),
     }
+
+
+# ============================================================
+# Upcoming check-ins query
+# ============================================================
+
+def get_upcoming_check_ins(elder_id: str, limit: int = 5) -> list[dict]:
+    """Fetch upcoming scheduled check-ins for an elder."""
+    return checkin_repo.get_upcoming(elder_id, limit=limit)

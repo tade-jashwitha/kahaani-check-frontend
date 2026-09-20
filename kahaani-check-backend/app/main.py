@@ -1,6 +1,19 @@
 import asyncio
 import logging
 import os
+import sys
+
+# Ensure UTF-8 output on Windows consoles/subprocesses to prevent charmap encoding errors
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 from contextlib import asynccontextmanager
 
@@ -15,36 +28,33 @@ from app.routers.calls import router as calls_router
 from app.routers.trajectory import router as trajectory_router
 from app.routers.checkins import router as checkins_router
 from app.routers.schedules import router as schedules_router
-
-from app.services.scheduler_worker import scheduler_loop
-
 from app.routers.audio import router as audio_router
-logging.basicConfig(
-    level=logging.INFO,
-)
+from app.routers.alerts import router as alerts_router
 
+from app.workers import schedule_worker
+
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("kahaani")
-
 
 settings = get_settings()
 
-
-scheduler_task: asyncio.Task | None = None
+_scheduler_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Start and stop the Kahaani-Check background scheduler
+    Start and stop Kahaani-Check background workers
     together with the FastAPI application.
     """
-
-    global scheduler_task
+    global _scheduler_task
 
     logger.info("Starting Kahaani-Check API...")
 
-    scheduler_task = asyncio.create_task(
-        scheduler_loop()
+    _scheduler_task = asyncio.create_task(
+        schedule_worker.scheduler_loop(),
+        name="kahaani-scheduler",
     )
 
     logger.info("Background scheduler started.")
@@ -53,11 +63,10 @@ async def lifespan(app: FastAPI):
 
     logger.info("Stopping Kahaani-Check API...")
 
-    if scheduler_task:
-        scheduler_task.cancel()
-
+    if _scheduler_task:
+        _scheduler_task.cancel()
         try:
-            await scheduler_task
+            await _scheduler_task
         except asyncio.CancelledError:
             pass
 
@@ -85,9 +94,24 @@ app.add_middleware(
 
 
 @app.get("/healthz")
-def healthz() -> dict[str, str]:
+def healthz() -> dict:
+    """
+    Health check endpoint.
+
+    Includes scheduler status for observability.
+    """
+    scheduler_last_run = (
+        schedule_worker.last_run_at.isoformat()
+        if schedule_worker.last_run_at
+        else None
+    )
+
     return {
-        "status": "ok"
+        "status": "ok",
+        "scheduler": {
+            "last_run_at": scheduler_last_run,
+            "last_run_status": schedule_worker.last_run_status,
+        },
     }
 
 
@@ -105,6 +129,6 @@ app.include_router(consent_router)
 app.include_router(calls_router)
 app.include_router(trajectory_router)
 app.include_router(schedules_router)
-
 app.include_router(audio_router)
 app.include_router(checkins_router)
+app.include_router(alerts_router)

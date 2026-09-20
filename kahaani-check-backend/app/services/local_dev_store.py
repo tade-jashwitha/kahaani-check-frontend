@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import logging
 import os
 import uuid
@@ -13,169 +14,18 @@ logger = logging.getLogger("kahaani.local_dev_store")
 # Storage directory for local audio files
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "storage"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+DB_FILE = DATA_DIR.parent / "local_db.json"
 
 DEFAULT_CAREGIVER_ID = "00000000-0000-0000-0000-000000000001"
 DEFAULT_CAREGIVER_EMAIL = "caregiver@kahaani.local"
 
-# Seed data
-SEED_ELDERS = [
-    {
-        "id": "e1111111-1111-1111-1111-111111111111",
-        "caregiver_id": DEFAULT_CAREGIVER_ID,
-        "display_name": "Savitri Devi",
-        "phone_e164": "+919876543210",
-        "preferred_call_language": "hi",
-        "dob_year_range": "1945-1950",
-        "timezone": "Asia/Kolkata",
-        "status": "active",
-        "created_at": "2026-08-01T10:00:00Z",
-    },
-    {
-        "id": "e2222222-2222-2222-2222-222222222222",
-        "caregiver_id": DEFAULT_CAREGIVER_ID,
-        "display_name": "Ramesh Sharma",
-        "phone_e164": "+919812345678",
-        "preferred_call_language": "hi",
-        "dob_year_range": "1940-1945",
-        "timezone": "Asia/Kolkata",
-        "status": "active",
-        "created_at": "2026-08-10T10:00:00Z",
-    },
-]
-
-SEED_SCHEDULES = [
-    {
-        "id": "s1111111-1111-1111-1111-111111111111",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "day_of_week": 1,
-        "time_of_day": "10:00",
-        "timezone": "Asia/Kolkata",
-        "enabled": True,
-        "created_at": "2026-08-01T10:00:00Z",
-    },
-    {
-        "id": "s2222222-2222-2222-2222-222222222222",
-        "elder_id": "e2222222-2222-2222-2222-222222222222",
-        "day_of_week": 3,
-        "time_of_day": "16:00",
-        "timezone": "Asia/Kolkata",
-        "enabled": True,
-        "created_at": "2026-08-10T10:00:00Z",
-    },
-]
-
-SEED_CHECKINS = [
-    {
-        "id": "c1111111-1111-1111-1111-111111111111",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "status": "completed",
-        "scheduled_for": "2026-08-25T10:00:00Z",
-        "completed_at": "2026-08-25T10:05:00Z",
-        "created_at": "2026-08-25T10:00:00Z",
-        "call_summary": "Discussed morning walk and daily routine. Voice is clear and lively.",
-    },
-    {
-        "id": "c2222222-2222-2222-2222-222222222222",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "status": "completed",
-        "scheduled_for": "2026-09-01T10:00:00Z",
-        "completed_at": "2026-09-01T10:06:00Z",
-        "created_at": "2026-09-01T10:00:00Z",
-        "call_summary": "Talked about recent family visit. Speech patterns normal and engaged.",
-    },
-    {
-        "id": "c3333333-3333-3333-3333-333333333333",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "status": "scheduled",
-        "scheduled_for": "2026-09-08T10:00:00Z",
-        "created_at": "2026-09-08T09:00:00Z",
-    },
-    {
-        "id": "voice-test",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "status": "scheduled",
-        "scheduled_for": "2026-09-08T10:00:00Z",
-        "created_at": "2026-09-08T09:00:00Z",
-    },
-    {
-        "id": "c4444444-4444-4444-4444-444444444444",
-        "elder_id": "e2222222-2222-2222-2222-222222222222",
-        "status": "completed",
-        "scheduled_for": "2026-09-03T16:00:00Z",
-        "completed_at": "2026-09-03T16:07:00Z",
-        "created_at": "2026-09-03T16:00:00Z",
-        "call_summary": "Checked in on evening gardening. Speech rate slightly slower than usual.",
-    },
-]
-
-SEED_BASELINES = [
-    {
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "speaking_rate_mean": 146.5,
-        "speaking_rate_stddev": 12.0,
-        "pause_density_mean": 0.042,
-        "pause_density_stddev": 0.015,
-        "lexical_diversity_mean": 0.62,
-        "lexical_diversity_stddev": 0.05,
-        "sample_count": 3,
-        "created_at": "2026-08-25T10:05:00Z",
-    },
-    {
-        "elder_id": "e2222222-2222-2222-2222-222222222222",
-        "speaking_rate_mean": 132.0,
-        "speaking_rate_stddev": 14.5,
-        "pause_density_mean": 0.055,
-        "pause_density_stddev": 0.02,
-        "lexical_diversity_mean": 0.58,
-        "lexical_diversity_stddev": 0.06,
-        "sample_count": 3,
-        "created_at": "2026-08-20T16:00:00Z",
-    },
-]
-
-SEED_OBSERVATIONS = [
-    {
-        "id": "o1111111-1111-1111-1111-111111111111",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "check_in_id": "c1111111-1111-1111-1111-111111111111",
-        "speaking_rate_wpm": 148.0,
-        "pause_density": 0.039,
-        "lexical_diversity_ttr": 0.63,
-        "status": "stable",
-        "created_at": "2026-08-25T10:05:00Z",
-    },
-    {
-        "id": "o2222222-2222-2222-2222-222222222222",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "check_in_id": "c2222222-2222-2222-2222-222222222222",
-        "speaking_rate_wpm": 145.2,
-        "pause_density": 0.044,
-        "lexical_diversity_ttr": 0.61,
-        "status": "stable",
-        "created_at": "2026-09-01T10:06:00Z",
-    },
-]
-
-SEED_CONSENTS = [
-    {
-        "id": "cn111111-1111-1111-1111-111111111111",
-        "elder_id": "e1111111-1111-1111-1111-111111111111",
-        "consent_type": "weekly_voice_checkin",
-        "status": "confirmed",
-        "captured_via": "web",
-        "captured_at": "2026-08-01T10:00:00Z",
-        "created_at": "2026-08-01T10:00:00Z",
-    },
-    {
-        "id": "cn222222-2222-2222-2222-222222222222",
-        "elder_id": "e2222222-2222-2222-2222-222222222222",
-        "consent_type": "weekly_voice_checkin",
-        "status": "confirmed",
-        "captured_via": "web",
-        "captured_at": "2026-08-10T10:00:00Z",
-        "created_at": "2026-08-10T10:00:00Z",
-    },
-]
+# Seed data - initialized clean (no dummy elders)
+SEED_ELDERS: list[dict[str, Any]] = []
+SEED_SCHEDULES: list[dict[str, Any]] = []
+SEED_CHECKINS: list[dict[str, Any]] = []
+SEED_BASELINES: list[dict[str, Any]] = []
+SEED_OBSERVATIONS: list[dict[str, Any]] = []
+SEED_CONSENTS: list[dict[str, Any]] = []
 
 
 class LocalResponse:
@@ -240,6 +90,10 @@ class LocalTableQuery:
         self.filters.append((column, "lte", value))
         return self
 
+    def in_(self, column: str, values: Any):
+        self.filters.append((column, "in", list(values)))
+        return self
+
     def order(self, column: str, desc: bool = False):
         self.order_by = (column, desc)
         return self
@@ -273,7 +127,14 @@ class LocalTableQuery:
 
             if op == "eq":
                 if str(row_val) != str(val):
-                    return False
+                    dev_caregiver_ids = {
+                        "00000000-0000-0000-0000-000000000001",
+                        "191adf9e-26c9-52d8-90d0-523de2a3ae66",
+                    }
+                    if col in ("caregiver_id", "elders.caregiver_id") and str(row_val) in dev_caregiver_ids and str(val) in dev_caregiver_ids:
+                        pass
+                    else:
+                        return False
             elif op == "neq":
                 if str(row_val) == str(val):
                     return False
@@ -288,6 +149,9 @@ class LocalTableQuery:
                     return False
             elif op == "lte":
                 if not (row_val is not None and row_val <= val):
+                    return False
+            elif op == "in":
+                if str(row_val) not in [str(v) for v in val]:
                     return False
         return True
 
@@ -309,6 +173,7 @@ class LocalTableQuery:
                     new_row["status"] = "scheduled"
                 rows.append(new_row)
                 inserted.append(copy.deepcopy(new_row))
+            self.store._save()
             return LocalResponse(data=inserted)
 
         elif self.operation == "update":
@@ -317,6 +182,7 @@ class LocalTableQuery:
                 if self._matches_filters(row):
                     row.update(self.payload)
                     updated.append(copy.deepcopy(row))
+            self.store._save()
             return LocalResponse(data=updated)
 
         elif self.operation == "delete":
@@ -328,6 +194,7 @@ class LocalTableQuery:
                 else:
                     kept.append(row)
             self.store.tables[self.table_name] = kept
+            self.store._save()
             return LocalResponse(data=deleted)
 
         else:
@@ -370,10 +237,15 @@ class LocalStorageBucket:
         self.bucket_dir = DATA_DIR / bucket_name
         self.bucket_dir.mkdir(parents=True, exist_ok=True)
 
-    def upload(self, path: str, file_bytes: bytes, file_options: Any = None):
+    def upload(self, path: str, file: bytes | Any = None, file_options: Any = None, file_bytes: bytes | None = None, **kwargs):
         target_file = self.bucket_dir / path.replace("/", os.sep)
         target_file.parent.mkdir(parents=True, exist_ok=True)
-        target_file.write_bytes(file_bytes)
+        data = file if file is not None else file_bytes
+        if data is None and "file" in kwargs:
+            data = kwargs["file"]
+        if hasattr(data, "read"):
+            data = data.read()
+        target_file.write_bytes(data if isinstance(data, bytes) else bytes(data or b""))
         return {"Key": f"{self.bucket_name}/{path}"}
 
     def download(self, path: str) -> bytes:
@@ -415,12 +287,30 @@ class LocalAuthResponse:
 
 class LocalAuth:
     def get_user(self, jwt_token: str | None = None) -> LocalAuthResponse:
+        if jwt_token:
+            token_str = str(jwt_token).strip()
+            user_email = ""
+            if ":" in token_str:
+                user_email = token_str.split(":", 1)[1].strip()
+            elif token_str.startswith("dev-user-"):
+                user_email = token_str[len("dev-user-"):].strip()
+
+            if user_email and user_email.lower() != DEFAULT_CAREGIVER_EMAIL.lower():
+                import uuid
+                user_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, user_email.lower()))
+                return LocalAuthResponse(LocalAuthUser(uid=user_id, email=user_email))
+
         return LocalAuthResponse(LocalAuthUser())
 
 
 class LocalDevStore:
     def __init__(self):
-        self.tables: dict[str, list[dict]] = {
+        self.tables = self._load()
+        self.storage = LocalStorage()
+        self.auth = LocalAuth()
+
+    def _default_tables(self) -> dict[str, list[dict]]:
+        return {
             "users": [
                 {
                     "id": DEFAULT_CAREGIVER_ID,
@@ -438,11 +328,34 @@ class LocalDevStore:
             "elder_consents": copy.deepcopy(SEED_CONSENTS),
             "calls": [],
             "checkin_audio": [],
+            "alerts": [],
         }
-        self.storage = LocalStorage()
-        self.auth = LocalAuth()
+
+    def _load(self) -> dict[str, list[dict]]:
+        if DB_FILE.exists():
+            try:
+                data = json.loads(DB_FILE.read_text(encoding="utf-8"))
+                defaults = self._default_tables()
+                for k, v in defaults.items():
+                    if k not in data:
+                        data[k] = v
+                return data
+            except Exception as exc:
+                logger.warning(f"Could not load {DB_FILE}: {exc}")
+        tables = self._default_tables()
+        self._save(tables)
+        return tables
+
+    def _save(self, tables: dict[str, list[dict]] | None = None):
+        try:
+            target = tables if tables is not None else self.tables
+            DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+            DB_FILE.write_text(json.dumps(target, indent=2), encoding="utf-8")
+        except Exception as exc:
+            logger.warning(f"Could not save {DB_FILE}: {exc}")
 
     def table(self, table_name: str) -> LocalTableQuery:
+        self.tables = self._load()
         return LocalTableQuery(self, table_name)
 
 

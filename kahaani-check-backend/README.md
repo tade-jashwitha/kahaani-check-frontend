@@ -14,5 +14,7 @@
 * app/models     — Pydantic schemas
 * migrations     — Postgres/Supabase schema (source of truth: PRD \& Architecture doc §7)
 
-See the PRD \& Architecture doc for full endpoint contracts, DB schema, and pipeline rules.
+See the PRD & Architecture doc for full endpoint contracts, DB schema, and pipeline rules.
+
+For algorithmic Big-O analysis, empirical benchmarks, and system scalability profiling, see [docs/COMPLEXITY_ANALYSIS.md](../docs/COMPLEXITY_ANALYSIS.md).
 

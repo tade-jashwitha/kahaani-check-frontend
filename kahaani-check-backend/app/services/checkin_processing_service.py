@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from app.services.supabase_client import get_supabase_client
+from app.repositories import baseline_repo, consent_repo, trajectory_repo
 from app.services.baseline_service import (
     get_baseline,
     save_baseline,
@@ -15,55 +15,39 @@ from app.services.trajectory_engine import (
 
 
 # ============================================================
-# Consent
+# Check-in Processing Service
+# ============================================================
+# Orchestrates post-recording analysis:
+#   consent verification → baseline management → trajectory comparison
+#
+# All Supabase access is delegated to repository modules.
+# All ML/statistical logic is delegated to trajectory_engine.
 # ============================================================
 
-CONSENT_TYPE = "weekly_voice_checkin"
-CONFIRMED_STATUS = "confirmed"
 
+# ============================================================
+# Consent verification
+# ============================================================
 
-def verify_voice_consent(
-    elder_id: str,
-) -> bool:
+def verify_voice_consent(elder_id: str) -> bool:
     """
-    Verify that the elder has active consent for weekly
-    voice check-ins.
+    Verify that the elder has active consent for weekly voice check-ins.
 
-    A confirmed consent is valid only if:
-      - status = confirmed
+    A consent is valid only if:
+      - status = 'confirmed'
       - expires_at is NULL OR expires_at is in the future
     """
+    consent = consent_repo.get_latest_for_elder(elder_id)
 
-    supabase = get_supabase_client()
-
-    result = (
-        supabase
-        .table("consents")
-        .select(
-            "id, status, captured_at, expires_at"
-        )
-        .eq(
-            "elder_id",
-            elder_id,
-        )
-        .eq(
-            "consent_type",
-            CONSENT_TYPE,
-        )
-        .order(
-            "captured_at",
-            desc=True,
-        )
-        .limit(1)
-        .execute()
-    )
-
-    if not result or not result.data:
+    if not consent:
         return False
 
-    consent = result.data[0]
+    # Normalize status across both consent table schemas.
+    status = consent.get("status") or (
+        "confirmed" if consent.get("consented") else "pending"
+    )
 
-    if consent.get("status") != CONFIRMED_STATUS:
+    if status != "confirmed":
         return False
 
     expires_at = consent.get("expires_at")
@@ -73,40 +57,29 @@ def verify_voice_consent(
 
         try:
             expiry = datetime.fromisoformat(
-                expires_at.replace(
-                    "Z",
-                    "+00:00",
-                )
+                expires_at.replace("Z", "+00:00")
             )
-
             if expiry <= datetime.now(timezone.utc):
                 return False
-
         except Exception:
-            # If an expiry exists but cannot be safely parsed,
-            # fail closed.
+            # Unparseable expiry — fail closed.
             return False
 
     return True
 
 
 # ============================================================
-# Get current baseline
+# Baseline management
 # ============================================================
 
-def get_or_create_baseline(
-    elder_id: str,
-) -> Optional[dict]:
+def get_or_create_baseline(elder_id: str) -> Optional[dict]:
     """
     Return the frozen baseline.
 
-    If it does not exist yet, attempt to create it.
-
-    The baseline is created only when 3 usable samples exist.
+    Attempts to create it from existing samples if it does not
+    exist yet.  Returns None if fewer than 3 usable samples exist.
     """
-
     baseline = get_baseline(elder_id)
-
     if baseline:
         return baseline
 
@@ -114,161 +87,7 @@ def get_or_create_baseline(
 
 
 # ============================================================
-# Get previous trajectory observations
-# ============================================================
-
-def get_previous_observations(
-    elder_id: str,
-) -> list[dict]:
-    """
-    Read previous trajectory results for this elder.
-
-    Returns lightweight observations suitable for longitudinal
-    evaluation.
-    """
-
-    supabase = get_supabase_client()
-
-    result = (
-        supabase
-        .table("trajectory_results")
-        .select(
-            """
-            id,
-            elder_id,
-            call_recording_id,
-            baseline_id,
-            overall_status,
-            speaking_rate_z_score,
-            speaking_rate_status,
-            pause_density_z_score,
-            pause_density_status,
-            lexical_diversity_z_score,
-            lexical_diversity_status,
-            created_at
-            """
-        )
-        .eq(
-            "elder_id",
-            elder_id,
-        )
-        .order(
-            "created_at",
-            desc=False,
-        )
-        .execute()
-    )
-
-    if not result or not result.data:
-        return []
-
-    observations = []
-
-    for row in result.data:
-        observations.append(
-            {
-                "id": row.get("id"),
-                "call_recording_id": row.get(
-                    "call_recording_id"
-                ),
-                "overall_status": row.get(
-                    "overall_status"
-                ),
-
-                "speaking_rate_z_score": row.get(
-                    "speaking_rate_z_score"
-                ),
-                "speaking_rate_status": row.get(
-                    "speaking_rate_status"
-                ),
-
-                "pause_density_z_score": row.get(
-                    "pause_density_z_score"
-                ),
-                "pause_density_status": row.get(
-                    "pause_density_status"
-                ),
-
-                "lexical_diversity_z_score": row.get(
-                    "lexical_diversity_z_score"
-                ),
-                "lexical_diversity_status": row.get(
-                    "lexical_diversity_status"
-                ),
-
-                "created_at": row.get(
-                    "created_at"
-                ),
-            }
-        )
-
-    return observations
-
-
-# ============================================================
-# Save trajectory result
-# ============================================================
-
-def save_trajectory_result(
-    elder_id: str,
-    recording_id: str,
-    baseline_id: str,
-    comparison: dict,
-) -> dict:
-    """
-    Persist the comparison result into trajectory_results.
-    """
-
-    supabase = get_supabase_client()
-
-    insert_data = {
-        "elder_id": elder_id,
-        "call_recording_id": recording_id,
-        "baseline_id": baseline_id,
-
-        "overall_status": comparison.get(
-            "overall_status"
-        ),
-
-        "speaking_rate_z_score": comparison.get(
-            "speaking_rate_z_score"
-        ),
-        "speaking_rate_status": comparison.get(
-            "speaking_rate_status"
-        ),
-
-        "pause_density_z_score": comparison.get(
-            "pause_density_z_score"
-        ),
-        "pause_density_status": comparison.get(
-            "pause_density_status"
-        ),
-
-        "lexical_diversity_z_score": comparison.get(
-            "lexical_diversity_z_score"
-        ),
-        "lexical_diversity_status": comparison.get(
-            "lexical_diversity_status"
-        ),
-    }
-
-    result = (
-        supabase
-        .table("trajectory_results")
-        .insert(insert_data)
-        .execute()
-    )
-
-    if not result or not result.data:
-        raise RuntimeError(
-            "Failed to save trajectory result"
-        )
-
-    return result.data[0]
-
-
-# ============================================================
-# Finalize analysis
+# Full post-recording analysis
 # ============================================================
 
 def finalize_checkin_analysis(
@@ -280,24 +99,27 @@ def finalize_checkin_analysis(
     Complete baseline + trajectory processing after a recording
     has successfully produced usable speech features.
 
-    This function is intentionally safe for:
-      - first recordings
-      - baseline creation
-      - post-baseline recordings
+    Safe for:
+      - first recordings (baseline not yet created)
+      - baseline creation recordings (third usable sample)
+      - post-baseline recordings (trajectory comparison)
       - insufficient longitudinal history
+
+    Returns a result dict with keys:
+      status, neutral_status, baseline, trajectory
     """
 
     # --------------------------------------------------------
-    # 1. Validate features
+    # 1. Validate required features are present
     # --------------------------------------------------------
 
-    required_features = [
+    required = [
         "speaking_rate_wpm",
         "pause_density",
         "lexical_diversity_ttr",
     ]
 
-    for feature in required_features:
+    for feature in required:
         if features.get(feature) is None:
             return {
                 "status": "insufficient_data",
@@ -307,22 +129,19 @@ def finalize_checkin_analysis(
             }
 
     # --------------------------------------------------------
-    # 2. Check existing baseline
+    # 2. Check whether a frozen baseline already exists
     # --------------------------------------------------------
 
     baseline = get_baseline(elder_id)
 
     # --------------------------------------------------------
-    # 3. No baseline yet
+    # 3. No baseline yet — try to create one
     # --------------------------------------------------------
 
     if not baseline:
+        baseline = get_or_create_baseline(elder_id)
 
-        baseline = get_or_create_baseline(
-            elder_id
-        )
-
-        # Still collecting baseline samples.
+        # Still collecting samples.
         if not baseline:
             return {
                 "status": "baseline_collecting",
@@ -331,13 +150,8 @@ def finalize_checkin_analysis(
                 "trajectory": None,
             }
 
-        # The current recording may have become the third
-        # sample that created the baseline.
-        #
+        # The current recording may have triggered baseline creation.
         # We do NOT compare the baseline against itself.
-        #
-        # Future recordings will be compared against it.
-
         return {
             "status": "baseline_created",
             "neutral_status": "Insufficient data",
@@ -346,7 +160,7 @@ def finalize_checkin_analysis(
         }
 
     # --------------------------------------------------------
-    # 4. Baseline already exists
+    # 4. Baseline exists — compare current features against it
     # --------------------------------------------------------
 
     comparison = compare_with_baseline(
@@ -355,10 +169,10 @@ def finalize_checkin_analysis(
     )
 
     # --------------------------------------------------------
-    # 5. Save this trajectory observation
+    # 5. Persist this trajectory observation
     # --------------------------------------------------------
 
-    trajectory_row = save_trajectory_result(
+    trajectory_row = trajectory_repo.save_result(
         elder_id=elder_id,
         recording_id=recording_id,
         baseline_id=baseline["id"],
@@ -366,28 +180,12 @@ def finalize_checkin_analysis(
     )
 
     # --------------------------------------------------------
-    # 6. Evaluate longitudinal trend
+    # 6. Evaluate longitudinal trend across all observations
     # --------------------------------------------------------
 
-    previous_observations = (
-        get_previous_observations(
-            elder_id
-        )
-    )
-
-    longitudinal_status = (
-        evaluate_longitudinal_change(
-            previous_observations
-        )
-    )
-
-    # --------------------------------------------------------
-    # 7. Neutral user-facing status
-    # --------------------------------------------------------
-
-    neutral_status = get_neutral_status(
-        longitudinal_status
-    )
+    observations = trajectory_repo.get_observations_for_elder(elder_id)
+    longitudinal_status = evaluate_longitudinal_change(observations)
+    neutral_status = get_neutral_status(longitudinal_status)
 
     return {
         "status": longitudinal_status,
@@ -395,8 +193,6 @@ def finalize_checkin_analysis(
         "baseline": baseline,
         "trajectory": {
             **trajectory_row,
-            "longitudinal_status": (
-                longitudinal_status
-            ),
+            "longitudinal_status": longitudinal_status,
         },
     }

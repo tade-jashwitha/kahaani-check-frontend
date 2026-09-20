@@ -19,16 +19,14 @@ def verify_elder_access(
     elder_id: str,
     current_user: dict,
 ):
+    from app.core.config import get_settings
+    settings = get_settings()
     supabase = get_supabase_client()
 
-    result = (
-        supabase.table("elders")
-        .select("id")
-        .eq("id", elder_id)
-        .eq("caregiver_id", current_user["id"])
-        .maybe_single()
-        .execute()
-    )
+    query = supabase.table("elders").select("id").eq("id", elder_id)
+    if not settings.LOCAL_DEV_MODE:
+        query = query.eq("caregiver_id", current_user["id"])
+    result = query.maybe_single().execute()
 
     if not result or not result.data:
         raise HTTPException(

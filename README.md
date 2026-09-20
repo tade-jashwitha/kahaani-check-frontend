@@ -103,8 +103,9 @@ See [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md) for full deployment instructi
 
 ---
 
-## Architecture
+## Architecture & Technical Analysis
 
 - **Frontend**: Next.js 14 (App Router), React 18, Tailwind CSS, Lucide icons, Recharts.
 - **Backend**: FastAPI, Python 3.11, Uvicorn, Pydantic v2.
 - **Speech & Audio**: `praat-parselmouth`, `faster-whisper`, `librosa`, `numpy`.
+- **Complexity & Scalability Analysis**: See [docs/COMPLEXITY_ANALYSIS.md](./docs/COMPLEXITY_ANALYSIS.md) for the complete Big-O algorithmic bounds, benchmark measurements, and deployment scalability analysis.

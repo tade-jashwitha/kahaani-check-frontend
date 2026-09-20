@@ -53,17 +53,22 @@ export default function LoginPage() {
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!email || !password) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) {
       return;
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
         password,
       });
 
-      if (!error) {
+      if (!error && data?.session) {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("kahaani_dev_token");
+          localStorage.setItem("kahaani_user_email", cleanEmail);
+        }
         window.location.href = "/dashboard";
         return;
       }
@@ -71,8 +76,12 @@ export default function LoginPage() {
       // Supabase is offline or using local placeholder credentials
     }
 
-    // Local dev mode fallback
-    localStorage.setItem("kahaani_dev_token", "dev-token");
+    // Local dev mode fallback with account isolation by email:
+    const token = `dev-user:${cleanEmail}`;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kahaani_dev_token", token);
+      localStorage.setItem("kahaani_user_email", cleanEmail);
+    }
     window.location.href = "/dashboard";
   };
 
@@ -81,11 +90,24 @@ export default function LoginPage() {
      SIGN UP
   ===================================================== */
 
-  const handleSignUp = (event: FormEvent<HTMLFormElement>) => {
+  const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!name || !email || !password) {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!name || !cleanEmail || !password) {
       return;
+    }
+
+    try {
+      await supabase.auth.signUp({
+        email: cleanEmail,
+        password,
+        options: {
+          data: { full_name: name },
+        },
+      });
+    } catch {
+      // offline / local dev
     }
 
     setMode("otp");
@@ -138,29 +160,65 @@ export default function LoginPage() {
   };
 
 
-  const handleVerifyOtp = () => {
+  const handleVerifyOtp = async () => {
     const code = otp.join("");
 
     if (code.length !== 6) {
       return;
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: code,
+        type: "signup",
+      });
+      if (!error && data?.session) {
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("kahaani_dev_token");
+          localStorage.setItem("kahaani_user_email", cleanEmail);
+          if (name) localStorage.setItem("kahaani_user_name", name);
+        }
+        window.location.href = "/dashboard";
+        return;
+      }
+    } catch {
+      // offline / local dev
+    }
+
+    // New user in dev mode: get an isolated personal account with 0 initial elders
+    const token = `dev-user:${cleanEmail}`;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kahaani_dev_token", token);
+      localStorage.setItem("kahaani_user_email", cleanEmail);
+      if (name) localStorage.setItem("kahaani_user_name", name);
+    }
     window.location.href = "/dashboard";
   };
 
 
   /* =====================================================
-     DEMO SOCIAL LOGIN
+     SOCIAL LOGIN
   ===================================================== */
 
   const handleGoogle = () => {
-    localStorage.setItem("kahaani_dev_token", "dev-token");
+    const cleanEmail = email ? email.trim().toLowerCase() : "user@gmail.com";
+    const token = `dev-user:${cleanEmail}`;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kahaani_dev_token", token);
+      localStorage.setItem("kahaani_user_email", cleanEmail);
+    }
     window.location.href = "/dashboard";
   };
 
-
   const handleApple = () => {
-    localStorage.setItem("kahaani_dev_token", "dev-token");
+    const cleanEmail = email ? email.trim().toLowerCase() : "user@icloud.com";
+    const token = `dev-user:${cleanEmail}`;
+    if (typeof window !== "undefined") {
+      localStorage.setItem("kahaani_dev_token", token);
+      localStorage.setItem("kahaani_user_email", cleanEmail);
+    }
     window.location.href = "/dashboard";
   };
 

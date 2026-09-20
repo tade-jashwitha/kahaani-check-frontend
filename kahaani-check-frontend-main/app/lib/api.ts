@@ -22,10 +22,13 @@ export async function apiFetch(
   let token: string | undefined;
 
   try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    token = session?.access_token;
+    const sessionRes = await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<{ data: { session: null } }>((resolve) =>
+        setTimeout(() => resolve({ data: { session: null } }), 1000)
+      ),
+    ]);
+    token = sessionRes?.data?.session?.access_token;
   } catch {
     // Supabase session lookup failed or offline
   }

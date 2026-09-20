@@ -72,6 +72,71 @@ def classify_z_score(
 
 
 # ============================================================
+# Detailed metric comparison against personal baseline
+# ============================================================
+
+def compute_metric_comparison(
+    current_val: Optional[float],
+    baseline_mean: Optional[float],
+    baseline_stddev: Optional[float],
+    z_score: Optional[float],
+    status: Optional[str],
+) -> dict:
+    """
+    Calculate current value, baseline value, absolute diff,
+    percentage diff, trend direction, and neutral label.
+    """
+    if current_val is None:
+        return {
+            "current_value": None,
+            "baseline_value": baseline_mean,
+            "absolute_diff": None,
+            "percentage_diff": None,
+            "trend_direction": "unavailable",
+            "comparison_label": "Measurement unavailable",
+            "z_score": None,
+            "status": "unavailable",
+        }
+
+    if baseline_mean is None:
+        return {
+            "current_value": float(current_val),
+            "baseline_value": None,
+            "absolute_diff": None,
+            "percentage_diff": None,
+            "trend_direction": "calibrating",
+            "comparison_label": "Calibrating baseline",
+            "z_score": None,
+            "status": "baseline_collecting",
+        }
+
+    abs_diff = float(current_val) - float(baseline_mean)
+    pct_diff = (abs_diff / float(baseline_mean) * 100.0) if float(baseline_mean) != 0 else 0.0
+
+    if status in ("changed", "significant_change"):
+        if abs_diff > 0:
+            trend_direction = "higher"
+            comparison_label = "Higher than usual"
+        else:
+            trend_direction = "lower"
+            comparison_label = "Lower than usual"
+    else:
+        trend_direction = "typical"
+        comparison_label = "Consistent with personal baseline"
+
+    return {
+        "current_value": round(float(current_val), 2),
+        "baseline_value": round(float(baseline_mean), 2),
+        "absolute_diff": round(abs_diff, 2),
+        "percentage_diff": round(pct_diff, 1),
+        "trend_direction": trend_direction,
+        "comparison_label": comparison_label,
+        "z_score": round(z_score, 2) if z_score is not None else None,
+        "status": status or "stable",
+    }
+
+
+# ============================================================
 # Compare current features with baseline
 # ============================================================
 
@@ -133,6 +198,30 @@ def compare_with_baseline(
     else:
         overall_status = "stable"
 
+    biomarker_comparisons = {
+        "speaking_rate": compute_metric_comparison(
+            current_features.get("speaking_rate_wpm"),
+            baseline.get("speaking_rate_mean"),
+            baseline.get("speaking_rate_stddev"),
+            speaking_rate_z,
+            speaking_rate_status,
+        ),
+        "pause_density": compute_metric_comparison(
+            current_features.get("pause_density"),
+            baseline.get("pause_density_mean"),
+            baseline.get("pause_density_stddev"),
+            pause_density_z,
+            pause_density_status,
+        ),
+        "lexical_diversity": compute_metric_comparison(
+            current_features.get("lexical_diversity_ttr"),
+            baseline.get("lexical_diversity_mean"),
+            baseline.get("lexical_diversity_stddev"),
+            lexical_diversity_z,
+            lexical_diversity_status,
+        ),
+    }
+
     return {
         "overall_status": overall_status,
 
@@ -144,6 +233,8 @@ def compare_with_baseline(
 
         "lexical_diversity_z_score": lexical_diversity_z,
         "lexical_diversity_status": lexical_diversity_status,
+
+        "biomarker_comparisons": biomarker_comparisons,
     }
 
 
