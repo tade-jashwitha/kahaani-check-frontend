@@ -92,12 +92,13 @@ To connect to your live Supabase cloud project:
 
 ## Deploying to Render
 
-You can deploy the full stack on [Render](https://render.com) using the included [`render.yaml`](./render.yaml) Blueprint:
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/tade-jashwitha/kahaani-check-frontend)
 
-1. Log in to [dashboard.render.com](https://dashboard.render.com/).
-2. Click **New +** -> **Blueprint**.
-3. Connect repository `tade-jashwitha/kahaani-check-frontend`.
-4. Click **Apply** to provision both the backend and frontend automatically.
+You can deploy the complete full stack (Backend + Frontend) with **1 click** on [Render](https://render.com) using the included [`render.yaml`](./render.yaml) Blueprint:
+
+1. Click the button above or open [Render 1-Click Deploy](https://render.com/deploy?repo=https://github.com/tade-jashwitha/kahaani-check-frontend).
+2. Connect your GitHub account if prompted.
+3. Click **Apply** to provision both the backend and frontend automatically.
 
 See [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md) for full deployment instructions and configuration details.
 
