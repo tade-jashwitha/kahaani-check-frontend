@@ -320,6 +320,7 @@ export default function VoiceRecorder({
         {
           method: "POST",
           body: formData,
+          timeoutMs: 120000,
         }
       )) as AudioProcessingResult;
 
@@ -544,6 +545,9 @@ export default function VoiceRecorder({
 
             <p className="mt-3 text-sm font-semibold text-[#263331]">
               {stepLabels[pipelineStep]}
+            </p>
+            <p className="mt-1 text-[11px] text-[#687470]">
+              AI speech transcription & biomarker analysis in progress (takes ~30–60s)
             </p>
 
             {/* Pipeline progress breadcrumbs */}

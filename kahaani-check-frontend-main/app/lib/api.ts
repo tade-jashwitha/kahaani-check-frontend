@@ -15,9 +15,13 @@ export function getApiBaseUrl(): string {
   return envUrl || "https://kahaani-check-backend.onrender.com";
 }
 
+export interface ApiFetchOptions extends RequestInit {
+  timeoutMs?: number;
+}
+
 export async function apiFetch(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ) {
   let token: string | undefined;
 
@@ -44,8 +48,12 @@ export async function apiFetch(
   const isFormData = options.body instanceof FormData;
   const baseUrl = getApiBaseUrl();
 
+  // Audio processing (Whisper STT + biomarker extraction) or Render cold starts need 60-120 seconds
+  const defaultTimeout = (isFormData || endpoint.includes("/audio")) ? 120000 : 60000;
+  const timeoutMs = options.timeoutMs ?? defaultTimeout;
+
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${baseUrl}${endpoint}`, {
@@ -77,7 +85,9 @@ export async function apiFetch(
     return response.json();
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
-      throw new Error("Request timed out. Please verify your backend service is running.");
+      throw new Error(
+        "Request timed out. The server or AI transcription model is taking longer to respond. If running on Render, the free server may still be waking up — please try again in a moment."
+      );
     }
     throw err;
   } finally {
