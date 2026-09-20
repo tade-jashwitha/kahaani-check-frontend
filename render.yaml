@@ -53,9 +53,9 @@ services:
       - key: NEXT_PUBLIC_LOCAL_DEV
         value: "true"
       - key: BACKEND_URL
-        value: "https://kahaani-backend.onrender.com"
+        value: "https://kahaani-check-backend.onrender.com"
       - key: NEXT_PUBLIC_API_URL
-        value: "https://kahaani-backend.onrender.com"
+        value: "https://kahaani-check-backend.onrender.com"
       - key: NEXT_PUBLIC_SUPABASE_URL
         sync: false
       - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
