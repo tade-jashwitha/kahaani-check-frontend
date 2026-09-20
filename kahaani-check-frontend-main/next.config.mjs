@@ -8,7 +8,7 @@ const nextConfig = {
     const backendUrl =
       process.env.BACKEND_URL ||
       process.env.NEXT_PUBLIC_API_URL ||
-      "http://localhost:8000";
+      "https://kahaani-check-backend.onrender.com";
     return [
       {
         source: "/api/backend/:path*",

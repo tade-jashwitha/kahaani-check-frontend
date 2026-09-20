@@ -18,7 +18,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Build-time environment variables for Next.js
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
+ARG NEXT_PUBLIC_API_URL=https://kahaani-check-backend.onrender.com
 ARG NEXT_PUBLIC_SUPABASE_URL=http://localhost:54321
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=local-anon-key
 ARG NEXT_PUBLIC_LOCAL_DEV=true

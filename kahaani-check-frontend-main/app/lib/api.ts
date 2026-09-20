@@ -9,10 +9,10 @@ export function getApiBaseUrl(): string {
     if (!isLocalhost && (!envUrl || envUrl.includes("localhost") || envUrl.includes("127.0.0.1"))) {
       const stored = localStorage.getItem("kahaani_api_url");
       if (stored) return stored;
-      return "/api/backend";
+      return "https://kahaani-check-backend.onrender.com";
     }
   }
-  return envUrl || "http://localhost:8000";
+  return envUrl || "https://kahaani-check-backend.onrender.com";
 }
 
 export async function apiFetch(
@@ -44,31 +44,43 @@ export async function apiFetch(
   const isFormData = options.body instanceof FormData;
   const baseUrl = getApiBaseUrl();
 
-  const response = await fetch(`${baseUrl}${endpoint}`, {
-    ...options,
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    headers: {
-      ...(isFormData
-        ? {}
-        : {
-            "Content-Type": "application/json",
-          }),
+  try {
+    const response = await fetch(`${baseUrl}${endpoint}`, {
+      ...options,
+      signal: options.signal || controller.signal,
+      headers: {
+        ...(isFormData
+          ? {}
+          : {
+              "Content-Type": "application/json",
+            }),
 
-      Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
 
-      ...(options.headers || {}),
-    },
-  });
+        ...(options.headers || {}),
+      },
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
+    if (!response.ok) {
+      const errorText = await response.text();
 
-    throw new Error(
-      `API error ${response.status}: ${
-        errorText || response.statusText
-      }`
-    );
+      throw new Error(
+        `API error ${response.status}: ${
+          errorText || response.statusText
+        }`
+      );
+    }
+
+    return response.json();
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error("Request timed out. Please verify your backend service is running.");
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return response.json();
 }
