@@ -20,9 +20,33 @@ export default function VoiceTestPage() {
         const id = res?.check_in?.id || res?.id;
         if (id) {
           setCheckInId(id);
+          return;
         }
-      } catch (err) {
-        console.warn("Using default check-in slot for voice test:", err);
+      } catch {
+        // If current check-in lookup failed (e.g. brand new account with 0 elders),
+        // automatically create an elder slot and retrieve the new active check-in
+        try {
+          await apiFetch("/v1/elders", {
+            method: "POST",
+            body: JSON.stringify({
+              display_name: "Family Elder",
+              phone_e164: "+919876543210",
+              preferred_call_language: "hi",
+              dob_year_range: "1945-1950",
+              timezone: "Asia/Kolkata",
+            }),
+          });
+          const retryRes = (await apiFetch("/v1/check-ins/current")) as {
+            check_in?: { id?: string };
+            id?: string;
+          };
+          const id = retryRes?.check_in?.id || retryRes?.id;
+          if (id) {
+            setCheckInId(id);
+          }
+        } catch (innerErr) {
+          console.warn("Session init warning:", innerErr);
+        }
       }
     }
     initCheckIn();

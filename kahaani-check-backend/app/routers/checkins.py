@@ -38,10 +38,23 @@ def get_current_checkin(
     elders = elder_repo.list_by_caregiver(current_user["id"])
 
     if not elders:
-        raise HTTPException(
-            status_code=404,
-            detail="No elder found for this caregiver",
-        )
+        from app.core.config import get_settings
+        if get_settings().LOCAL_DEV_MODE:
+            new_elder = elder_repo.create({
+                "caregiver_id": current_user["id"],
+                "display_name": "Family Elder",
+                "phone_e164": "+919876543210",
+                "preferred_call_language": "hi",
+                "dob_year_range": "1945-1950",
+                "timezone": "Asia/Kolkata",
+                "status": "active",
+            })
+            elders = [new_elder]
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="No elder found for this caregiver",
+            )
 
     elder = elders[0]
 

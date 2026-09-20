@@ -140,10 +140,16 @@ def transcribe(
     # 3. temperature fallback list: steps up temperature when compression ratio fails
     # 4. vad_filter with conservative silence threshold: prevents trailing silence hallucinations
     # 5. condition_on_previous_text=False: prevents looping context bleed across 30s segments
-    beam_size = 5
-    best_of = 5
+    # Optimized decoding parameters for fast, responsive processing:
+    # 1. beam_size=1, best_of=1: greedy decoding is 5-10x faster on CPU and avoids timeouts
+    # 2. repetition_penalty=1.2: suppresses recurrent token loops
+    # 3. no_repeat_ngram_size=3: strictly forbids identical 3-grams repeating consecutively
+    # 4. vad_filter with conservative silence threshold: prevents trailing silence hallucinations
+    # 5. condition_on_previous_text=False: prevents looping context bleed across segments
+    beam_size = 1
+    best_of = 1
     patience = 1.0
-    temperatures = [0.0, 0.2, 0.4, 0.6, 0.8]
+    temperatures = [0.0]
     repetition_penalty = 1.2
     no_repeat_ngram_size = 3
     vad_params = dict(min_silence_duration_ms=500, speech_pad_ms=200, threshold=0.5)
