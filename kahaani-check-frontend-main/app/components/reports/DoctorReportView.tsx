@@ -5,17 +5,9 @@ import {
   Printer,
   X,
   FileText,
-  Calendar,
-  User,
   Shield,
-  Activity,
   CheckCircle2,
-  AlertTriangle,
   Heart,
-  TrendingUp,
-  Clock,
-  ExternalLink,
-  ChevronRight,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -120,17 +112,6 @@ function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat("en-IN", {
     day: "numeric",
     month: "short",
-    year: "numeric",
-  }).format(date);
-}
-
-function formatFullDate(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "long",
     year: "numeric",
   }).format(date);
 }

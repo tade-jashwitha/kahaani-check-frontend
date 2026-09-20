@@ -18,7 +18,6 @@ import {
   Loader2,
   Phone,
   Printer,
-  FileText,
 } from "lucide-react";
 
 import { apiFetch } from "@/app/lib/api";

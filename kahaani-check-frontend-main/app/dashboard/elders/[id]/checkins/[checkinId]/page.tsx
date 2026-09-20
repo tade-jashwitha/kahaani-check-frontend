@@ -118,7 +118,7 @@ export default function CheckInDetailPage() {
   const [elderName, setElderName] = useState<string>("Family member");
 
   const [loading, setLoading] = useState(true);
-  const [audioLoading, setAudioLoading] = useState(false);
+  const [_audioLoading, setAudioLoading] = useState(false);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -240,21 +240,11 @@ export default function CheckInDetailPage() {
     }
   };
 
-  const transcriptText =
-    (typeof audio?.transcript === "string" ? audio.transcript : audio?.transcript?.text) ||
-    ((audio?.processing as Record<string, unknown> | undefined)?.transcription as Record<string, unknown> | undefined)?.text as string ||
-    ((audio?.processing as Record<string, unknown> | undefined)?.transcript as Record<string, unknown> | undefined)?.text as string ||
-    "";
-
   const recordingObj = (audio?.recording || {}) as Record<string, unknown>;
-  const originalFilename =
-    audio?.original_filename || (recordingObj?.original_filename as string) || "";
   const durationSeconds =
     audio?.duration_seconds ??
     (recordingObj?.duration_seconds as number | undefined) ??
     ((audio?.processing as Record<string, unknown> | undefined)?.features as Record<string, unknown> | undefined)?.speech_duration_seconds as number | undefined;
-  const storagePath =
-    audio?.storage_path || (recordingObj?.storage_path as string) || "";
 
   if (loading) {
     return (

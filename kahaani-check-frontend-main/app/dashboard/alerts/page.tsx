@@ -14,7 +14,6 @@ import {
   Mic,
   FileText,
   X,
-  Shield,
   Info,
 } from "lucide-react";
 

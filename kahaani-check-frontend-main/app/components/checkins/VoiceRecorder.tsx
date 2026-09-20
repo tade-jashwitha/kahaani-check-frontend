@@ -4,9 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
-  AlertTriangle,
   CheckCircle2,
-  FileText,
   Loader2,
   Mic,
   Play,
@@ -402,50 +400,6 @@ export default function VoiceRecorder({
   const isRecording = state === "recording";
   const isUploading = state === "uploading";
   const isComplete = state === "complete";
-
-  // Extract transcript text
-  const rawTranscript =
-    (typeof result?.transcript === "string" ? result.transcript : result?.transcript?.text) ||
-    result?.transcript_data?.text ||
-    result?.processing?.transcription?.text ||
-    "";
-
-  // Extract metadata
-  const detectedLangCode =
-    result?.language ||
-    result?.transcript_data?.language ||
-    (typeof result?.transcript === "object" ? result.transcript?.language : undefined) ||
-    result?.processing?.transcription?.language ||
-    "";
-
-  const displayLanguage =
-    detectedLangCode.toLowerCase() === "hi"
-      ? "Hindi"
-      : detectedLangCode.toLowerCase() === "en"
-      ? "English"
-      : detectedLangCode || "Hindi / English";
-
-  const displayDuration =
-    result?.duration !== undefined
-      ? Number(result.duration).toFixed(1)
-      : result?.processing?.quality?.duration_seconds !== undefined
-      ? Number(result.processing.quality.duration_seconds).toFixed(1)
-      : undefined;
-
-  // Extract quality status & flags
-  const transcriptionStatus =
-    result?.transcription_status ||
-    result?.transcript_data?.transcription_status ||
-    result?.processing?.transcription?.transcription_status ||
-    "ok";
-
-  const qualityFlags: string[] =
-    result?.quality_flags ||
-    result?.transcript_data?.quality_flags ||
-    result?.processing?.transcription?.quality_flags ||
-    [];
-
-  const hasQualityWarning = transcriptionStatus === "quality_warning" || qualityFlags.length > 0;
 
   // Pipeline step messages
   const stepLabels: Record<PipelineStep, string> = {

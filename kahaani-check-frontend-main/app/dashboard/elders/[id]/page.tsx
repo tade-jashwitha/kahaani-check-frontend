@@ -13,7 +13,6 @@ import {
   ShieldCheck,
   AlertCircle,
   CheckCircle2,
-  Activity,
   FileText,
   Loader2,
   ClipboardCheck,
@@ -37,7 +36,6 @@ import {
 
 import PageContainer from "@/app/components/ui/PageContainer";
 import PageHeader from "@/app/components/ui/PageHeader";
-import StatCard from "@/app/components/ui/StatCard";
 import SectionHeader from "@/app/components/ui/SectionHeader";
 import Badge from "@/app/components/ui/Badge";
 import Button from "@/app/components/ui/Button";
@@ -206,7 +204,6 @@ export default function ElderProfilePage() {
   const completedCount = trajectory?.baseline_progress?.completed ?? Math.min(observations.length, 3);
   const isBaselineReady = trajectory?.baseline_progress?.ready || Boolean(trajectory?.baseline);
   const latestObservation = observations.length > 0 ? observations[observations.length - 1] : null;
-  const latestFeatures = latestObservation?.features;
 
   const [scheduling, setScheduling] = useState(false);
   const [scheduleSuccess, setScheduleSuccess] = useState<string | null>(null);

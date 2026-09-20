@@ -9,16 +9,13 @@ import {
   AlertTriangle,
   FileText,
   Printer,
-  TrendingUp,
   Clock,
   Users,
   Mic,
   Loader2,
   Info,
   Shield,
-  ArrowUpRight,
   Sparkles,
-  ExternalLink,
   X,
   ChevronRight,
 } from "lucide-react";
@@ -34,14 +31,12 @@ import {
 } from "recharts";
 
 import PageContainer from "@/app/components/ui/PageContainer";
-import PageHeader from "@/app/components/ui/PageHeader";
 import Badge from "@/app/components/ui/Badge";
 import EmptyState from "@/app/components/ui/EmptyState";
 import Button from "@/app/components/ui/Button";
 import { apiFetch } from "@/app/lib/api";
 import { useAlerts } from "@/app/features/alerts/hooks";
 import DoctorReportView, {
-  type DoctorReportElder,
   type DoctorReportBaseline,
   type DoctorReportObservation,
   type DoctorReportCaregiverSummary,
